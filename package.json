@@ -1,0 +1,27 @@
+{
+  "name": "nucleogov-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Suite de testes E2E do Nucleogov com Cypress.",
+  "scripts": {
+    "cy:open": "cypress open",
+    "cy:run": "cypress run",
+    "cy:run:smoke": "cypress run --spec 'cypress/e2e/smoke/**/*.cy.js'",
+    "cy:run:admin": "cypress run --spec 'cypress/e2e/admin/**/*.cy.js'",
+    "cy:run:portal": "cypress run --spec 'cypress/e2e/portal/**/*.cy.js'",
+    "lint": "eslint .",
+    "format": "prettier --check .",
+    "format:write": "prettier --write ."
+  },
+  "devDependencies": {
+    "cypress": "^14.5.4",
+    "dotenv": "^16.6.1",
+    "eslint": "^9.39.5",
+    "globals": "^16.5.0",
+    "prettier": "^3.9.5"
+  },
+  "dependencies": {
+    "@faker-js/faker": "^10.5.0",
+    "cpf-cnpj-validator": "^2.1.2"
+  }
+}
