@@ -57,9 +57,12 @@ function obterNomeOrgaoParaPesquisa(orgao) {
     return "PODER EXECUTIVO";
   }
 
-  return (
-    nomesPorCodigo[codigo] || normalizarTexto(orgao).replace(/^\d+\s*-\s*/, "")
-  );
+  const nomeParaPesquisa =
+    nomesPorCodigo[codigo] ||
+    normalizarTexto(orgao).replace(/^\d+\s*-\s*/, "") ||
+    codigo;
+
+  return nomeParaPesquisa;
 }
 
 function obterSiglasOrgao(nomeOrgao) {
@@ -166,7 +169,7 @@ function selecionarOrgaoDoPortal(orgaoDoPortal) {
   return cy.get("#select_orgao").then(($container) => {
     cy.wrap($container).find(".selected").click({ force: true });
     cy.wrap($container)
-      .find("input:visible")
+      .find("input#search:visible")
       .first()
       .should("be.visible")
       .clear({ force: true })
@@ -179,16 +182,24 @@ function selecionarOrgaoDoPortal(orgaoDoPortal) {
       .should("have.length.at.least", 1)
       .then(($opcoes) => {
         const opcoes = Array.from($opcoes);
+        const codigoOrgao = obterCodigoOrgao(orgaoDoPortal);
+        const opcaoPorCodigo = opcoes.find(
+          (elemento) =>
+            elemento.getAttribute("href")?.replace(/^#/, "") === codigoOrgao,
+        );
         const opcaoPorNome = opcoes.find((elemento) => {
           return orgaosCorrespondem(nomeOrgao, elemento.textContent);
         });
 
-        const opcao = opcaoPorNome;
+        const opcao = opcaoPorCodigo || opcaoPorNome;
 
         expect(opcao, `órgão do portal "${orgaoDoPortal}" disponível no filtro`)
           .to.exist;
 
-        const orgao = normalizarTexto(opcao.textContent);
+        const orgao = {
+          texto: normalizarTexto(opcao.textContent),
+          codigo: opcao.getAttribute("href")?.replace(/^#/, "") || "",
+        };
         cy.wrap(opcao).click({ force: true });
         return cy.wrap(orgao, { log: false });
       });
@@ -312,10 +323,17 @@ function validarOrgaoNoDetalhe(orgaoSelecionado) {
       const orgaoRetornado = normalizarTexto(
         $campo.val() || $campo.text() || $campo.attr("value") || "",
       );
+      const codigoRetornado = obterCodigoOrgao(orgaoRetornado);
+      const codigoSelecionado = orgaoSelecionado.codigo;
+      const orgaosCorrespondemPorCodigo =
+        codigoSelecionado !== "" &&
+        codigoRetornado !== "" &&
+        codigoSelecionado === codigoRetornado;
 
       expect(
-        orgaosCorrespondem(orgaoSelecionado, orgaoRetornado),
-        `órgão retornado "${orgaoRetornado}" compatível com "${orgaoSelecionado}"`,
+        orgaosCorrespondemPorCodigo ||
+          orgaosCorrespondem(orgaoSelecionado.texto, orgaoRetornado),
+        `órgão retornado "${orgaoRetornado}" compatível com "${orgaoSelecionado.texto}"`,
       ).to.equal(true);
     });
 }
@@ -630,7 +648,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtros externos`, () => {
     obterOrgaoDoPortal().then((orgaoDoPortal) => {
       selecionarOrgaoDoPortal(orgaoDoPortal).then((orgaoSelecionado) => {
         aguardarListagem();
-        validarOrgaoNoDetalhe(normalizarTexto(orgaoSelecionado));
+        validarOrgaoNoDetalhe(orgaoSelecionado);
       });
     });
   });

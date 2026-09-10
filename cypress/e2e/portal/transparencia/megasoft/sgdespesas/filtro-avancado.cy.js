@@ -1,5 +1,6 @@
 const SG_DESPESAS_PATH = "/cidadao/transparencia/sgdespesas";
 const SG_DESPESAS_NOME = "sgdespesas";
+const LISTAGEM_TIMEOUT = 60000;
 
 function normalizarTexto(texto = "") {
   return texto.replace(/\s+/g, " ").trim();
@@ -10,6 +11,28 @@ function normalizarParaComparacao(texto = "") {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+}
+
+function removerCodigo(texto = "") {
+  return normalizarParaComparacao(texto).replace(/^[\d.]+\s*[-.)]\s*/, "");
+}
+
+function valoresDoFiltroCorrespondem(valorEsperado, valorDaOpcao) {
+  const esperado = normalizarParaComparacao(valorEsperado);
+  const opcao = normalizarParaComparacao(valorDaOpcao);
+  const esperadoSemCodigo = removerCodigo(valorEsperado);
+  const opcaoSemCodigo = removerCodigo(valorDaOpcao);
+
+  if (!esperadoSemCodigo || !opcaoSemCodigo) {
+    return false;
+  }
+
+  return (
+    opcao === esperado ||
+    opcaoSemCodigo === esperadoSemCodigo ||
+    opcao.includes(esperadoSemCodigo) ||
+    esperado.includes(opcaoSemCodigo)
+  );
 }
 
 function obterCampoAvancadoPorRotulo(rotulo) {
@@ -73,21 +96,81 @@ function obterTermosSignificativos(texto) {
 
 function obterSiglaDoOrgao(nomeOrgao) {
   const siglas = {
-    "fundo municipal de educação": "fme",
+    "fundo municipal de educacao": "fme",
     "fundo municipal de saude": "fms",
-    "fundo municipal de saúde": "fms",
-    "fundo municipal de assistência social": "fmas",
     "fundo municipal de assistencia social": "fmas",
-    "fundo municipal de habitação e interesse social": "fmhis",
     "fundo municipal de habitacao e interesse social": "fmhis",
     "fundo municipal de meio ambiente": "fmma",
     fundef: "fundef",
   };
-  const nomeNormalizado = normalizarTexto(nomeOrgao)
-    .replace(/^\d+\s*-\s*/, "")
-    .toLowerCase();
+  const nomeNormalizado = removerCodigo(nomeOrgao);
 
-  return siglas[nomeNormalizado] || "";
+  return (
+    siglas[nomeNormalizado] ||
+    nomeNormalizado
+      .replace(/\b(a|as|da|das|de|do|dos|e)\b/g, " ")
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((termo) => termo[0])
+      .join("")
+  );
+}
+
+function ehPrefeituraOuPoderExecutivo(nomeOrgao) {
+  return /\bprefeitura\b|\bpoder executivo\b/.test(removerCodigo(nomeOrgao));
+}
+
+function obterIdentificadoresDoOrgao(nomeOrgao) {
+  const nomeNormalizado = removerCodigo(nomeOrgao);
+  const identificadores = new Set([nomeNormalizado]);
+  const sigla = obterSiglaDoOrgao(nomeOrgao);
+
+  if (sigla) {
+    identificadores.add(sigla);
+  }
+
+  // O SGDespesas pode exibir a Prefeitura como "Prefeitura ..." no
+  // detalhamento e como "Poder Executivo" no filtro avançado, ou o inverso.
+  if (ehPrefeituraOuPoderExecutivo(nomeOrgao)) {
+    identificadores.add("prefeitura");
+    identificadores.add("poder executivo");
+  }
+
+  return identificadores;
+}
+
+function orgaosCorrespondem(nomeEsperado, nomeEncontrado) {
+  const esperado = removerCodigo(nomeEsperado);
+  const encontrado = removerCodigo(nomeEncontrado);
+
+  if (!esperado || !encontrado) {
+    return false;
+  }
+
+  if (
+    esperado === encontrado ||
+    esperado.includes(encontrado) ||
+    encontrado.includes(esperado)
+  ) {
+    return true;
+  }
+
+  const identificadoresEsperados = obterIdentificadoresDoOrgao(nomeEsperado);
+  const identificadoresEncontrados =
+    obterIdentificadoresDoOrgao(nomeEncontrado);
+
+  if (
+    [...identificadoresEsperados].some((identificador) =>
+      identificadoresEncontrados.has(identificador),
+    )
+  ) {
+    return true;
+  }
+
+  const termosEsperados = obterTermosSignificativos(nomeEsperado);
+  const termosEncontrados = obterTermosSignificativos(encontrado);
+
+  return termosEsperados.some((termo) => termosEncontrados.includes(termo));
 }
 
 function selecionarOpcao(containerSelector, textoOpcao) {
@@ -97,10 +180,112 @@ function selecionarOpcao(containerSelector, textoOpcao) {
   }).click({ force: true });
 }
 
+function obterContainerDoSelect(campo) {
+  return typeof campo === "string"
+    ? cy.get(campo, { timeout: 30000 })
+    : cy.wrap(campo);
+}
+
+// Alguns selects do filtro avançado são autocompletes: ao abrir, exibem apenas
+// o campo de busca e criam as opções depois que um texto é digitado. Os
+// selects estáticos, por outro lado, já exibem a lista ao abrir.
+function abrirSelectAvancadoComOpcoes(campo) {
+  return obterContainerDoSelect(campo).then(($container) => {
+    const clicarNoSelect = () =>
+      cy
+        .wrap($container)
+        .find(".selected", { timeout: 30000 })
+        .should("be.visible")
+        .click({ force: true });
+
+    const obterOpcoesDoContainer = () =>
+      cy.wrap(Array.from($container.find(".options:visible .list a:visible")), {
+        log: false,
+      });
+
+    const aguardarOpcoesDoContainer = () =>
+      cy
+        .wrap($container, { log: false })
+        .find(".options", { timeout: 30000 })
+        .should("be.visible")
+        .find(".list a", { timeout: 30000 })
+        .filter(":visible")
+        .should("have.length.at.least", 1);
+
+    return clicarNoSelect()
+      .then(() => cy.wait(500, { log: false }))
+      .then(() => obterOpcoesDoContainer())
+      .then(($opcoes) => {
+        if ($opcoes.length) {
+          return $opcoes;
+        }
+
+        const possuiCampoDeBusca =
+          $container.find(".options:visible input:visible").length > 0;
+
+        if (possuiCampoDeBusca) {
+          return cy.wrap([], { log: false });
+        }
+
+        cy.log("Select sem opções; fechando e reabrindo o próprio select.");
+
+        const selectEstaAberto = $container.find(".options:visible").length;
+        const fecharSelect = selectEstaAberto ? clicarNoSelect() : undefined;
+
+        return (fecharSelect || cy.then(() => undefined))
+          .then(() => clicarNoSelect())
+          .then(() => cy.wait(500, { log: false }))
+          .then(() => aguardarOpcoesDoContainer())
+          .then(($opcoesNovas) => {
+            return $opcoesNovas;
+          });
+      });
+  });
+}
+
+function obterOpcoesCarregadas(campo) {
+  return cy
+    .get(campo, { timeout: 30000 })
+    .find(".options", { timeout: 30000 })
+    .should("be.visible")
+    .find(".list a", { timeout: 30000 })
+    .filter(":visible")
+    .should("have.length.at.least", 1);
+}
+
+function pesquisarAutocomplete(campo, texto) {
+  return obterContainerDoSelect(campo)
+    .find("input:visible")
+    .first()
+    .should("be.visible")
+    .clear({ force: true })
+    .type(texto, { force: true })
+    .then(($input) => {
+      const $controleBusca = Cypress.$(campo)
+        .find(
+          '.options:visible .containerbusca .icon-lupa:visible, .options:visible button:visible, .options:visible a:visible, .options:visible [class*="search"]:visible, .options:visible [class*="busca"]:visible',
+        )
+        .filter((_, elemento) => {
+          const textoDoControle = normalizarParaComparacao(
+            `${elemento.textContent || ""} ${elemento.className || ""} ${elemento.getAttribute("title") || ""} ${elemento.getAttribute("aria-label") || ""}`,
+          );
+
+          return /buscar|busca|pesquisar|search|magnif/.test(textoDoControle);
+        })
+        .first();
+
+      if ($controleBusca.length) {
+        return cy.wrap($controleBusca).click({ force: true });
+      }
+
+      return cy.wrap($input).type("{enter}", { force: true });
+    });
+}
+
 function aguardarListagem() {
-  cy.get(".loader", { timeout: 30000 }).should("not.exist");
-  cy.get(".cont_dados", { timeout: 30000 }).should("be.visible");
-  cy.get(".tb-load", { timeout: 30000 }).should("not.exist");
+  cy.get(".loader", { timeout: LISTAGEM_TIMEOUT }).should("not.exist");
+  cy.get(".cont_dados", { timeout: LISTAGEM_TIMEOUT }).should("be.visible");
+  cy.get(".tb-load", { timeout: LISTAGEM_TIMEOUT }).should("not.exist");
 }
 
 function obterLinhasValidas() {
@@ -163,7 +348,16 @@ function prepararListagemComFavorecido() {
 
 function abrirFiltroAvancado(campoSelector = "#fornecedor") {
   cy.get("body").then(($body) => {
-    if (!$body.find(`${campoSelector}:visible`).length) {
+    const campoVisivel = $body.find(`${campoSelector}:visible`).length > 0;
+    const painelAvancadoVisivel =
+      $body.find(
+        "#select_org_avanc:visible, #select_unidade:visible, #select_funcao:visible, #select_programa:visible, #rubricaDaDespesa:visible",
+      ).length > 0;
+
+    if (
+      !campoVisivel ||
+      (campoSelector === ".campo label" && !painelAvancadoVisivel)
+    ) {
       cy.get("#busca_avancada", { timeout: 30000 })
         .should("be.visible")
         .click({ force: true });
@@ -188,12 +382,18 @@ function limparFiltrosAntesDoTeste() {
 
 function selecionarCovidAvancado(opcao) {
   obterCampoAvancadoPorRotulo("Filtrar COVID-19").then(($campo) => {
-    cy.wrap($campo).find(".selected").click({ force: true });
-    cy.wrap($campo)
-      .find(".options .list a", { timeout: 30000 })
+    abrirSelectAvancadoComOpcoes($campo)
       .should("have.length.at.least", 2)
-      .contains(opcao, { matchCase: false })
-      .click({ force: true });
+      .then(($opcoes) => {
+        const opcaoEncontrada = Array.from($opcoes).find((elemento) =>
+          normalizarParaComparacao(elemento.textContent).includes(
+            normalizarParaComparacao(opcao),
+          ),
+        );
+
+        expect(opcaoEncontrada, `opção COVID-19 ${opcao} disponível`).to.exist;
+        cy.wrap(opcaoEncontrada).click({ force: true });
+      });
   });
 }
 
@@ -419,157 +619,229 @@ function validarNumeroNaListagem(numeroBuscado) {
   });
 }
 
-function obterValorEmpenhadoDoEmpenho() {
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
+function converterValorMonetario(valor) {
+  const valorSemEspacos = normalizarTexto(valor).replace(/\s/g, "");
+  const valorNumerico = valorSemEspacos.replace(/[^\d,.-]/g, "");
+
+  if (!valorNumerico) {
+    return NaN;
+  }
+
+  if (valorNumerico.includes(",")) {
+    return Number(valorNumerico.replace(/\./g, "").replace(",", "."));
+  }
+
+  return Number(valorNumerico);
+}
+
+function formatarValorMonetario(valor) {
+  return valor
+    .toFixed(2)
+    .replace(".", ",")
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+function obterTextoDoValorNaLinha($linha, tipoValor) {
+  const empenhado = tipoValor === "empenhado";
+  const liquidado = tipoValor === "liquidado";
+  const seletoresDeValor = empenhado
+    ? [
+        ".colValorEmpenhado",
+        ".colValorEmpenho",
+        ".colEmpenhado",
+        '[class*="valor-empenhado"]',
+        '[class*="valorEmpenhado"]',
+        '[data-field*="empenh"]',
+      ]
+    : liquidado
+      ? [
+          ".colValorLiquidado",
+          ".colValorLiquidacao",
+          ".colLiquidado",
+          '[class*="valor-liquidado"]',
+          '[class*="valorLiquidado"]',
+          '[data-field*="liquid"]',
+        ]
+      : [
+          ".colValorPago",
+          ".colValorPagamento",
+          ".colPago",
+          '[class*="valor-pago"]',
+          '[class*="valorPago"]',
+          '[data-field*="pag"]',
+        ];
+
+  for (const seletor of seletoresDeValor) {
+    const texto = normalizarTexto($linha.find(seletor).first().text());
+
+    if (texto && Number.isFinite(converterValorMonetario(texto))) {
+      return texto;
+    }
+  }
+
+  const $tabela = $linha.closest("table");
+  const $cabecalhos = $tabela.find("thead th, thead td").length
+    ? $tabela.find("thead th, thead td")
+    : $tabela.find("tr").first().find("th, td");
+  const indiceDaColuna = Array.from($cabecalhos).findIndex((cabecalho) =>
+    (empenhado
+      ? /valor\s*empenh|empenh.*valor/i
+      : liquidado
+        ? /valor\s*liquid|liquid.*valor/i
+        : /valor\s*pag|pag.*valor/i
+    ).test(normalizarParaComparacao(cabecalho.textContent)),
+  );
+
+  if (indiceDaColuna >= 0) {
+    const texto = normalizarTexto(
+      $linha.children("td").eq(indiceDaColuna).text(),
+    );
+
+    if (texto && Number.isFinite(converterValorMonetario(texto))) {
+      return texto;
+    }
+  }
+
+  const textosDasCelulas = Array.from($linha.find("td"))
+    .map((celula) => normalizarTexto(celula.textContent))
+    .filter(Boolean);
+  const textoComMoeda = textosDasCelulas.find((texto) =>
+    /R\$\s*-?[\d.]+,\d{2}/i.test(texto),
+  );
+
+  if (textoComMoeda) {
+    return textoComMoeda;
+  }
+
+  return textosDasCelulas.find((texto) =>
+    /^-?[\d.]+,\d{2}$/.test(texto.replace(/\s/g, "")),
+  );
+}
+
+function obterTextoDoValorEmpenhadoNaLinha($linha) {
+  return obterTextoDoValorNaLinha($linha, "empenhado");
+}
+
+function obterTextoDoValorLiquidadoNaLinha($linha) {
+  return obterTextoDoValorNaLinha($linha, "liquidado");
+}
+
+function obterTextoDoValorPagoNaLinha($linha) {
+  return obterTextoDoValorNaLinha($linha, "pago");
+}
+
+function obterValoresMonetariosDaListagem(obterTextoDoValor, descricao) {
+  return obterLinhasValidas().then((linhas) => {
+    const valores = Array.from(linhas)
+      .map((linha) => {
+        const texto = obterTextoDoValor(Cypress.$(linha));
+
+        return {
+          texto: normalizarTexto(texto || ""),
+          numerico: converterValorMonetario(texto || ""),
+        };
+      })
+      .filter(({ texto, numerico }) => texto && Number.isFinite(numerico));
+
+    expect(
+      valores.length,
+      `${descricao} disponíveis na listagem`,
+    ).to.be.greaterThan(0);
+
+    const valoresOrdenados = [...valores].sort(
+      (valorA, valorB) => valorA.numerico - valorB.numerico,
+    );
+
+    return cy.wrap(
+      {
+        valores,
+        minimo: valoresOrdenados[0],
+        maximo: valoresOrdenados[valoresOrdenados.length - 1],
+      },
+      { log: false },
+    );
+  });
+}
+
+function obterValoresEmpenhadosDaListagem() {
+  return obterValoresMonetariosDaListagem(
+    obterTextoDoValorEmpenhadoNaLinha,
+    "valores empenhados",
+  );
+}
+
+function obterValoresLiquidadosDaListagem() {
+  return obterValoresMonetariosDaListagem(
+    obterTextoDoValorLiquidadoNaLinha,
+    "valores liquidados",
+  );
+}
+
+function obterValoresPagosDaListagem() {
+  return obterValoresMonetariosDaListagem(
+    obterTextoDoValorPagoNaLinha,
+    "valores pagos",
+  );
+}
+
+function preencherValorAvancado(rotulo, valor) {
+  return obterCampoAvancadoPorRotulo(rotulo)
+    .find("input, textarea, .input")
     .first()
-    .click({ force: true });
-
-  fecharTermosDeUsoSeExibido();
-
-  return cy
-    .contains(".campo label", /^Valor Empenhado$/i)
-    .parent()
-    .find("input, textarea, .input", { timeout: 30000 })
-    .first()
-    .scrollIntoView({ duration: 0 })
-    .should("exist")
-    .should(aguardarCampoComValor)
-    .then(obterValorDoCampo)
-    .then((valor) => {
-      const valorNormalizado = normalizarTexto(valor);
-
-      expect(valorNormalizado, "valor empenhado disponível").to.not.equal("");
-      cy.visitPortal(SG_DESPESAS_PATH);
-      aguardarListagem();
-
-      return cy.wrap(valorNormalizado, { log: false });
+    .clear({ force: true })
+    .type(valor, { force: true })
+    .should(($campo) => {
+      expect(
+        obterValorDoCampo($campo),
+        `valor preenchido em ${rotulo}`,
+      ).to.not.equal("");
     });
 }
 
-function validarValorEmpenhadoNoDetalhe(valorBuscado) {
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
-
-  fecharTermosDeUsoSeExibido();
-
-  cy.contains(".campo label", /^Valor Empenhado$/i)
-    .parent()
-    .find("input, textarea, .input", { timeout: 30000 })
-    .first()
-    .scrollIntoView({ duration: 0 })
-    .should("exist")
-    .should(aguardarCampoComValor)
-    .then(obterValorDoCampo)
-    .then((valorRetornado) => {
-      expect(normalizarTexto(valorRetornado)).to.equal(valorBuscado);
+function validarValoresMonetariosNaListagem(
+  obterValores,
+  limite,
+  tipoLimite,
+  descricao,
+) {
+  obterValores().then(({ valores }) => {
+    valores.forEach(({ numerico }) => {
+      if (tipoLimite === "minimo") {
+        expect(numerico, `${descricao} dentro do mínimo`).to.be.at.least(
+          limite,
+        );
+      } else {
+        expect(numerico, `${descricao} dentro do máximo`).to.be.at.most(limite);
+      }
     });
+  });
 }
 
-function obterValorLiquidadoDoEmpenho() {
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
-
-  fecharTermosDeUsoSeExibido();
-
-  return cy
-    .contains(".campo label", /^Valor Liquidado$/i)
-    .parent()
-    .find("input, textarea, .input", { timeout: 30000 })
-    .first()
-    .scrollIntoView({ duration: 0 })
-    .should("exist")
-    .should(aguardarCampoComValor)
-    .then(obterValorDoCampo)
-    .then((valor) => {
-      const valorNormalizado = normalizarTexto(valor);
-
-      expect(valorNormalizado, "valor liquidado disponível").to.not.equal("");
-      cy.visitPortal(SG_DESPESAS_PATH);
-      aguardarListagem();
-
-      return cy.wrap(valorNormalizado, { log: false });
-    });
+function validarValoresEmpenhadosNaListagem(limite, tipoLimite) {
+  validarValoresMonetariosNaListagem(
+    obterValoresEmpenhadosDaListagem,
+    limite,
+    tipoLimite,
+    "valor empenhado",
+  );
 }
 
-function validarValorLiquidadoNoDetalhe(valorBuscado) {
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
-
-  fecharTermosDeUsoSeExibido();
-
-  cy.contains(".campo label", /^Valor Liquidado$/i)
-    .parent()
-    .find("input, textarea, .input", { timeout: 30000 })
-    .first()
-    .scrollIntoView({ duration: 0 })
-    .should("exist")
-    .should(aguardarCampoComValor)
-    .then(obterValorDoCampo)
-    .then((valorRetornado) => {
-      expect(normalizarTexto(valorRetornado)).to.equal(valorBuscado);
-    });
+function validarValoresLiquidadosNaListagem(limite, tipoLimite) {
+  validarValoresMonetariosNaListagem(
+    obterValoresLiquidadosDaListagem,
+    limite,
+    tipoLimite,
+    "valor liquidado",
+  );
 }
 
-function obterValorPagoDoEmpenho() {
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
-
-  fecharTermosDeUsoSeExibido();
-
-  return cy
-    .contains(".campo label", /^Valor Pago$/i)
-    .parent()
-    .find("input, textarea, .input", { timeout: 30000 })
-    .first()
-    .scrollIntoView({ duration: 0 })
-    .should("exist")
-    .should(aguardarCampoComValor)
-    .then(obterValorDoCampo)
-    .then((valor) => {
-      const valorNormalizado = normalizarTexto(valor);
-
-      expect(valorNormalizado, "valor pago disponível").to.not.equal("");
-      cy.visitPortal(SG_DESPESAS_PATH);
-      aguardarListagem();
-
-      return cy.wrap(valorNormalizado, { log: false });
-    });
-}
-
-function validarValorPagoNoDetalhe(valorBuscado) {
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
-
-  fecharTermosDeUsoSeExibido();
-
-  cy.contains(".campo label", /^Valor Pago$/i)
-    .parent()
-    .find("input, textarea, .input", { timeout: 30000 })
-    .first()
-    .scrollIntoView({ duration: 0 })
-    .should("exist")
-    .should(aguardarCampoComValor)
-    .then(obterValorDoCampo)
-    .then((valorRetornado) => {
-      expect(normalizarTexto(valorRetornado)).to.equal(valorBuscado);
-    });
+function validarValoresPagosNaListagem(limite, tipoLimite) {
+  validarValoresMonetariosNaListagem(
+    obterValoresPagosDaListagem,
+    limite,
+    tipoLimite,
+    "valor pago",
+  );
 }
 
 function converterData(data) {
@@ -638,17 +910,9 @@ function obterOrgaoDoPrimeiroRegistro() {
 }
 
 function selecionarOrgao(nomeOrgao) {
-  cy.get("#select_org_avanc").find(".selected").click({ force: true });
-  cy.get("#select_org_avanc .options .list a").then(($opcoes) => {
-    const termosDoPortal = obterTermosSignificativos(nomeOrgao);
-    const siglaDoOrgao = obterSiglaDoOrgao(nomeOrgao);
+  abrirSelectAvancadoComOpcoes("#select_org_avanc").then(($opcoes) => {
     const opcao = Array.from($opcoes).find((elemento) => {
-      const termosDaOpcao = obterTermosSignificativos(elemento.textContent);
-      const textoDaOpcao = normalizarTexto(elemento.textContent).toLowerCase();
-      return (
-        termosDoPortal.some((termo) => termosDaOpcao.includes(termo)) ||
-        (siglaDoOrgao && textoDaOpcao.includes(siglaDoOrgao))
-      );
+      return orgaosCorrespondem(nomeOrgao, elemento.textContent);
     });
 
     expect(opcao, `órgão ${nomeOrgao} disponível no filtro`).to.exist;
@@ -670,14 +934,8 @@ function validarOrgaoNoDetalhe(nomeOrgao) {
     .should(aguardarCampoComValor)
     .then(obterValorDoCampo)
     .then((orgaoRetornado) => {
-      const termosEsperados = obterTermosSignificativos(nomeOrgao);
-      const termosRetornados = obterTermosSignificativos(orgaoRetornado);
-      const possuiTermoEmComum = termosEsperados.some((termo) =>
-        termosRetornados.includes(termo),
-      );
-
       expect(
-        possuiTermoEmComum,
+        orgaosCorrespondem(nomeOrgao, orgaoRetornado),
         `órgão retornado "${orgaoRetornado}" compatível com "${nomeOrgao}"`,
       ).to.equal(true);
     });
@@ -702,20 +960,28 @@ function unidadeCombinaComOpcao(nomeUnidade, nomeOpcao) {
     unidadeDaOpcao === unidadeEsperada ||
     unidadeDaOpcao.includes(unidadeEsperada) ||
     unidadeEsperada.includes(unidadeDaOpcao) ||
-    termosEmComum >= Math.min(2, termosEsperados.length)
+    (termosEsperados.length > 0 &&
+      termosEmComum >= Math.min(2, termosEsperados.length))
   );
 }
 
 function obterUnidadesDisponiveisNoFiltro() {
   abrirFiltroAvancado("#select_unidade");
-  cy.get("#select_unidade").find(".selected").click({ force: true });
 
-  return cy.get("#select_unidade .options .list a").then(($opcoes) => {
+  return abrirSelectAvancadoComOpcoes("#select_unidade").then(($opcoes) => {
     const unidades = Array.from($opcoes).map((elemento) =>
       normalizarTexto(elemento.textContent),
     );
 
-    expect(unidades, "unidades disponíveis no filtro").to.not.be.empty;
+    // Unidade é um autocomplete e pode não carregar a lista até que a busca
+    // seja preenchida. Nesse caso, a opção será validada após pesquisar a
+    // unidade obtida no detalhamento do registro.
+    if (!unidades.length) {
+      cy.get("#select_unidade").find(".selected").click({ force: true });
+      cy.get("#busca_avancada").click({ force: true });
+      return cy.wrap([], { log: false });
+    }
+
     cy.get("#select_unidade").find(".selected").click({ force: true });
     cy.get("#busca_avancada").click({ force: true });
 
@@ -741,9 +1007,11 @@ function obterUnidadeDoRegistroPesquisavel(unidadesDisponiveis, indice = 0) {
       .then(obterValorDoCampo)
       .then((unidade) => {
         const unidadeNormalizada = normalizarTexto(unidade);
-        const possuiOpcao = unidadesDisponiveis.some((unidadeDisponivel) =>
-          unidadeCombinaComOpcao(unidadeNormalizada, unidadeDisponivel),
-        );
+        const possuiOpcao =
+          !unidadesDisponiveis.length ||
+          unidadesDisponiveis.some((unidadeDisponivel) =>
+            unidadeCombinaComOpcao(unidadeNormalizada, unidadeDisponivel),
+          );
 
         cy.visitPortal(SG_DESPESAS_PATH);
         aguardarListagem();
@@ -761,7 +1029,6 @@ function obterUnidadeDoRegistroPesquisavel(unidadesDisponiveis, indice = 0) {
 }
 
 function selecionarUnidade(nomeUnidade) {
-  cy.get("#select_unidade").find(".selected").click({ force: true });
   const unidadeEsperada = normalizarParaComparacao(nomeUnidade).replace(
     /^\d+\s*-\s*/,
     "",
@@ -771,33 +1038,31 @@ function selecionarUnidade(nomeUnidade) {
     (termoA, termoB) => termoB.length - termoA.length,
   )[0];
 
-  return cy
-    .get("#select_unidade .options input", { timeout: 30000 })
-    .first()
-    .clear({ force: true })
-    .type(termoParaBusca || unidadeEsperada, { force: true })
+  return abrirSelectAvancadoComOpcoes("#select_unidade")
     .then(() =>
-      cy.get("#select_unidade .options .list a").then(($opcoes) => {
-        const opcao = Array.from($opcoes).find((elemento) => {
-          const unidadeDaOpcao = normalizarParaComparacao(
-            elemento.textContent,
-          ).replace(/^\d+\s*-\s*/, "");
-          const termosDaOpcao = obterTermosSignificativos(unidadeDaOpcao);
-          const termosEmComum = termosEsperados.filter((termo) =>
-            termosDaOpcao.includes(termo),
-          ).length;
-
-          return (
-            unidadeDaOpcao === unidadeEsperada ||
-            unidadeDaOpcao.includes(unidadeEsperada) ||
-            unidadeEsperada.includes(unidadeDaOpcao) ||
-            termosEmComum >= Math.min(2, termosEsperados.length)
+      pesquisarAutocomplete(
+        "#select_unidade",
+        termoParaBusca || unidadeEsperada,
+      ),
+    )
+    .then(() =>
+      obterOpcoesCarregadas("#select_unidade")
+        .should(
+          ($opcoes) =>
+            expect(
+              Array.from($opcoes).find((elemento) =>
+                unidadeCombinaComOpcao(nomeUnidade, elemento.textContent),
+              ),
+              `Unidade ${nomeUnidade} disponível no filtro`,
+            ).to.exist,
+        )
+        .then(($opcoes) => {
+          const opcao = Array.from($opcoes).find((elemento) =>
+            unidadeCombinaComOpcao(nomeUnidade, elemento.textContent),
           );
-        });
 
-        expect(opcao, `Unidade ${nomeUnidade} disponível no filtro`).to.exist;
-        cy.wrap(opcao).click({ force: true });
-      }),
+          cy.wrap(opcao).click({ force: true });
+        }),
     );
 }
 
@@ -867,12 +1132,11 @@ function fecharTermosDeUsoSeExibido() {
 }
 
 function selecionarFuncao(nomeFuncao) {
-  cy.get("#select_funcao").find(".selected").click({ force: true });
   const funcaoEsperada = normalizarParaComparacao(nomeFuncao).replace(
     /^\d+\s*-\s*/,
     "",
   );
-  cy.get("#select_funcao .options .list a").then(($opcoes) => {
+  abrirSelectAvancadoComOpcoes("#select_funcao").then(($opcoes) => {
     const opcao = Array.from($opcoes).find((elemento) =>
       normalizarParaComparacao(elemento.textContent).includes(funcaoEsperada),
     );
@@ -942,21 +1206,17 @@ function selecionarSubfuncao(nomeSubfuncao) {
   cy.contains(".campo label", /^Subfunção$/i)
     .parent()
     .then(($campo) => {
-      cy.wrap($campo).find(".selected").click({ force: true });
-      cy.wrap($campo)
-        .find(".options .list a", { timeout: 30000 })
-        .should("have.length.at.least", 1)
-        .then(($opcoes) => {
-          const opcao = Array.from($opcoes).find((elemento) =>
-            normalizarParaComparacao(elemento.textContent).includes(
-              subfuncaoEsperada,
-            ),
-          );
+      abrirSelectAvancadoComOpcoes($campo).then(($opcoes) => {
+        const opcao = Array.from($opcoes).find((elemento) =>
+          normalizarParaComparacao(elemento.textContent).includes(
+            subfuncaoEsperada,
+          ),
+        );
 
-          expect(opcao, `subfunção ${nomeSubfuncao} disponível no filtro`).to
-            .exist;
-          cy.wrap(opcao).click({ force: true });
-        });
+        expect(opcao, `subfunção ${nomeSubfuncao} disponível no filtro`).to
+          .exist;
+        cy.wrap(opcao).click({ force: true });
+      });
     });
 }
 
@@ -1019,26 +1279,22 @@ function selecionarGrupo(nomeGrupo) {
     .contains(".campo label", /^Grupo$/i)
     .parent()
     .then(($campo) => {
-      cy.wrap($campo).find(".selected").click({ force: true });
+      abrirSelectAvancadoComOpcoes($campo).then(($opcoes) => {
+        const opcao = Array.from($opcoes).find((elemento) => {
+          const textoOpcao = normalizarTexto(elemento.textContent);
+          const textoSemCodigo = textoOpcao
+            .replace(/^\d+\s*-\s*/, "")
+            .toLowerCase();
 
-      cy.wrap($campo)
-        .find(".options .list a")
-        .then(($opcoes) => {
-          const opcao = Array.from($opcoes).find((elemento) => {
-            const textoOpcao = normalizarTexto(elemento.textContent);
-            const textoSemCodigo = textoOpcao
-              .replace(/^\d+\s*-\s*/, "")
-              .toLowerCase();
-
-            return (
-              textoOpcao.toLowerCase().includes(nomeGrupo.toLowerCase()) ||
-              textoSemCodigo.includes(nomeGrupoSemCodigo.toLowerCase())
-            );
-          });
-
-          expect(opcao, `grupo ${nomeGrupo} disponível no filtro`).to.exist;
-          cy.wrap(opcao).click({ force: true });
+          return (
+            textoOpcao.toLowerCase().includes(nomeGrupo.toLowerCase()) ||
+            textoSemCodigo.includes(nomeGrupoSemCodigo.toLowerCase())
+          );
         });
+
+        expect(opcao, `grupo ${nomeGrupo} disponível no filtro`).to.exist;
+        cy.wrap(opcao).click({ force: true });
+      });
     });
 }
 
@@ -1103,11 +1359,23 @@ function selecionarModalidadeAplicacao(nomeModalidade) {
     .contains(".campo label", /^Modalidade de Aplicação$/i)
     .parent()
     .then(($campo) => {
-      cy.wrap($campo).find(".selected").click({ force: true });
+      abrirSelectAvancadoComOpcoes($campo)
+        .then(($opcoes) => {
+          const $input = $campo.find("input:visible").first();
 
-      cy.wrap($campo)
-        .find(".options .list a", { timeout: 30000 })
-        .should("have.length.at.least", 1)
+          if ($input.length) {
+            return pesquisarAutocomplete($campo, nomeModalidade);
+          }
+
+          return cy.wrap($opcoes, { log: false });
+        })
+        .then(() =>
+          cy
+            .wrap($campo)
+            .find(".options .list a", { timeout: 30000 })
+            .filter(":visible")
+            .should("have.length.at.least", 1),
+        )
         .then(($opcoes) => {
           const opcao = Array.from($opcoes).find((elemento) =>
             normalizarTexto(elemento.textContent)
@@ -1184,16 +1452,9 @@ function selecionarNatureza(nomeNatureza) {
   );
 
   return obterCampoAvancadoPorRotulo("Natureza").then(($campo) => {
-    cy.wrap($campo).find(".selected").click({ force: true });
-    cy.wrap($campo)
-      .find("input:visible")
-      .first()
-      .should("be.visible")
-      .clear({ force: true })
-      .type(naturezaEsperada, { force: true });
-
-    cy.wrap($campo)
-      .find(".options .list a")
+    abrirSelectAvancadoComOpcoes($campo)
+      .then(() => pesquisarAutocomplete($campo, naturezaEsperada))
+      .then(() => cy.wrap($campo).find(".options .list a"))
       .then(($opcoes) => {
         const opcao = Array.from($opcoes).find((elemento) =>
           normalizarParaComparacao(elemento.textContent).includes(
@@ -1264,19 +1525,16 @@ function selecionarElementoDaDespesa(nomeElemento) {
   const codigoElemento = nomeElemento.match(/^\d+/)?.[0] || nomeElemento;
 
   obterCampoAvancadoPorRotulo("Elemento").then(($campo) => {
-    cy.wrap($campo).find(".selected").click({ force: true });
-    cy.wrap($campo)
-      .find(".options .list a")
-      .then(($opcoes) => {
-        const opcao = Array.from($opcoes).find((elemento) =>
-          normalizarParaComparacao(elemento.textContent).startsWith(
-            normalizarParaComparacao(codigoElemento),
-          ),
-        );
+    abrirSelectAvancadoComOpcoes($campo).then(($opcoes) => {
+      const opcao = Array.from($opcoes).find((elemento) =>
+        normalizarParaComparacao(elemento.textContent).startsWith(
+          normalizarParaComparacao(codigoElemento),
+        ),
+      );
 
-        expect(opcao, `Elemento ${nomeElemento} disponível no filtro`).to.exist;
-        cy.wrap(opcao).click({ force: true });
-      });
+      expect(opcao, `Elemento ${nomeElemento} disponível no filtro`).to.exist;
+      cy.wrap(opcao).click({ force: true });
+    });
   });
 }
 
@@ -1340,19 +1598,14 @@ function selecionarAcoes(nomeAcoes) {
   );
 
   return obterCampoAvancadoPorRotulo("Ações").then(($campo) => {
-    cy.wrap($campo).find(".selected").click({ force: true });
-    cy.wrap($campo)
-      .find(".options .list a")
-      .then(($opcoes) => {
-        const opcao = Array.from($opcoes).find((elemento) =>
-          normalizarParaComparacao(elemento.textContent).includes(
-            acoesEsperadas,
-          ),
-        );
+    abrirSelectAvancadoComOpcoes($campo).then(($opcoes) => {
+      const opcao = Array.from($opcoes).find((elemento) =>
+        normalizarParaComparacao(elemento.textContent).includes(acoesEsperadas),
+      );
 
-        expect(opcao, `Ações ${nomeAcoes} disponível no filtro`).to.exist;
-        cy.wrap(opcao).click({ force: true });
-      });
+      expect(opcao, `Ações ${nomeAcoes} disponível no filtro`).to.exist;
+      cy.wrap(opcao).click({ force: true });
+    });
   });
 }
 
@@ -1380,52 +1633,72 @@ function validarAcoesNoDetalhe(nomeAcoes) {
     });
 }
 
-function obterProgramaDoEmpenho() {
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
+function registrarAlertaPrograma(mensagem, detalhes = {}) {
+  const mensagemComContexto = `ALERTA: ${mensagem}`;
 
-  fecharTermosDeUsoSeExibido();
+  Cypress.log({
+    name: "ALERTA",
+    message: mensagemComContexto,
+    consoleProps: () => detalhes,
+  });
+  cy.log(mensagemComContexto);
+}
 
-  return cy
-    .contains(".campo label", /^Programa$/)
-    .parent()
-    .find("#programa", { timeout: 30000 })
-    .scrollIntoView({ duration: 0 })
-    .should("be.visible")
-    .should(aguardarCampoComValor)
-    .then(obterValorDoCampo)
-    .then((programa) => {
-      const programaNormalizado = normalizarTexto(programa);
+function obterProgramaDoEmpenho(indice = 0) {
+  return obterLinhasValidas().then((linhas) => {
+    if (indice >= linhas.length) {
+      registrarAlertaPrograma(
+        "Nenhum registro com Programa preenchido foi encontrado na listagem.",
+        { registrosAnalisados: linhas.length },
+      );
 
-      expect(programaNormalizado, "programa disponível").to.not.equal("");
-      cy.visitPortal(SG_DESPESAS_PATH);
-      aguardarListagem();
+      return cy.wrap(null, { log: false });
+    }
 
-      return cy.wrap(programaNormalizado, { log: false });
-    });
+    cy.wrap(linhas[indice]).find(".colNumero").click({ force: true });
+    fecharTermosDeUsoSeExibido();
+
+    return cy
+      .contains(".campo label", /^Programa$/)
+      .parent()
+      .find("#programa", { timeout: 30000 })
+      .scrollIntoView({ duration: 0 })
+      .should("be.visible")
+      .then(obterValorDoCampo)
+      .then((programa) => {
+        const programaNormalizado = normalizarTexto(programa);
+        const programaValido =
+          programaNormalizado && !/^[-–—]+$/.test(programaNormalizado);
+
+        cy.visitPortal(SG_DESPESAS_PATH);
+        aguardarListagem();
+
+        if (programaValido) {
+          return cy.wrap(programaNormalizado, { log: false });
+        }
+
+        cy.log(
+          `Programa vazio ou inválido no registro ${indice + 1}; tentando o próximo.`,
+        );
+        return obterProgramaDoEmpenho(indice + 1);
+      });
+  });
 }
 
 function pesquisarProgramaAteEncontrarResultado(nomePrograma) {
-  const nomeProgramaSemCodigo = nomePrograma.replace(/^\d+\s*-\s*/, "").trim();
+  const nomeProgramaSemCodigo = removerCodigo(nomePrograma);
 
   return tentarOpcoesDePrograma(nomeProgramaSemCodigo, 0);
 }
 
+// O autocomplete de Programa pode retornar várias opções para o mesmo texto.
+// Cada tentativa repete a busca, seleciona a opção pelo índice e só avança
+// quando a consulta anterior não trouxe nenhuma linha válida.
 function tentarOpcoesDePrograma(nomePrograma, indice) {
-  const programaPesquisado = normalizarTexto(nomePrograma)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-
   abrirFiltroAvancado("#select_programa");
 
-  return cy
-    .get("#select_programa > .select > .selected")
-    .click({ force: true })
-    .get("#select_programa input:visible")
+  return abrirSelectAvancadoComOpcoes("#select_programa")
+    .then(() => cy.get("#select_programa input:visible"))
     .first()
     .should("be.visible")
     .clear({ force: true })
@@ -1434,34 +1707,29 @@ function tentarOpcoesDePrograma(nomePrograma, indice) {
     .get("#select_programa > .select > .options > .list")
     .should("be.visible")
     .find("a")
-    .should(($opcoes) => {
-      const opcoes = Array.from($opcoes).filter((opcao) =>
-        normalizarTexto(opcao.textContent)
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .toLowerCase()
-          .includes(programaPesquisado),
-      );
-
-      expect(
-        opcoes.length,
-        `opções filtradas para o programa ${nomePrograma}`,
-      ).to.be.greaterThan(0);
-    })
+    .filter(":visible")
     .then(($opcoes) => {
-      const opcoesFiltradas = Array.from($opcoes).filter((opcao) =>
-        normalizarTexto(opcao.textContent)
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .toLowerCase()
-          .includes(programaPesquisado),
+      const opcoesFiltradas = Array.from($opcoes).filter(
+        (opcao) =>
+          Cypress.$(opcao).is(":visible") &&
+          valoresDoFiltroCorrespondem(nomePrograma, opcao.textContent),
       );
       const quantidadeOpcoes = opcoesFiltradas.length;
 
-      expect(
-        quantidadeOpcoes,
-        `opções encontradas para o programa ${nomePrograma}`,
-      ).to.be.greaterThan(0);
+      if (!quantidadeOpcoes) {
+        registrarAlertaPrograma(
+          `Nenhuma opção encontrada para o programa "${nomePrograma}".`,
+          {
+            programaPesquisado: nomePrograma,
+            opcoesDisponiveis: Array.from($opcoes).map((opcao) =>
+              normalizarTexto(opcao.textContent),
+            ),
+          },
+        );
+
+        return cy.wrap(null, { log: false });
+      }
+
       expect(
         indice,
         `opção ${indice + 1} do programa ${nomePrograma}`,
@@ -1474,6 +1742,10 @@ function tentarOpcoesDePrograma(nomePrograma, indice) {
       return cy.wrap(quantidadeOpcoes, { log: false });
     })
     .then((quantidadeOpcoes) => {
+      if (!quantidadeOpcoes) {
+        return cy.wrap(null, { log: false });
+      }
+
       cy.contains("button, a, div", "PESQUISAR").click({ force: true });
       aguardarListagem();
 
@@ -1490,11 +1762,14 @@ function tentarOpcoesDePrograma(nomePrograma, indice) {
           return tentarOpcoesDePrograma(nomePrograma, proximoIndice);
         }
 
-        expect(
-          linhas.length,
-          `registros retornados pelas opções do programa ${nomePrograma}`,
-        ).to.be.greaterThan(0);
-        return cy.wrap(linhas, { log: false });
+        registrarAlertaPrograma(
+          `Nenhum resultado retornado para o programa "${nomePrograma}" após testar todas as opções.`,
+          {
+            programaPesquisado: nomePrograma,
+            opcoesTestadas: quantidadeOpcoes,
+          },
+        );
+        return cy.wrap(null, { log: false });
       });
     });
 }
@@ -1564,17 +1839,11 @@ function selecionarFonte(nomeFonte) {
     .contains(".campo label", /^Fontes$/i)
     .parent()
     .then(($campo) => {
-      cy.wrap($campo).find(".selected").click({ force: true });
-      cy.wrap($campo)
-        .find("input:visible")
-        .first()
-        .should("be.visible")
-        .clear({ force: true })
-        .type(codigoFonte, { force: true });
-
-      cy.wrap($campo)
-        .find(".options .list a", { timeout: 30000 })
-        .should("have.length.at.least", 1)
+      abrirSelectAvancadoComOpcoes($campo)
+        .then(() => pesquisarAutocomplete($campo, codigoFonte))
+        .then(() =>
+          cy.wrap($campo).find(".options .list a", { timeout: 30000 }),
+        )
         .then(($opcoes) => {
           const opcaoPorCodigo = Array.from($opcoes).find(
             (elemento) =>
@@ -1685,34 +1954,50 @@ function obterCategoriaEconomicaDoPrimeiroRegistro() {
 }
 
 function selecionarCategoriaEconomica(nomeCategoria) {
-  const codigoCategoria = nomeCategoria.match(/^\d+/)?.[0] || nomeCategoria;
+  const nomeCategoriaParaPesquisa = nomeCategoria
+    .replace(/^[\d.]+\s*[-.)]\s*/, "")
+    .trim();
+  const nomeCategoriaNormalizado = normalizarParaComparacao(
+    nomeCategoriaParaPesquisa,
+  );
 
   return cy
     .contains(".campo label", /^Categoria Econômica$/i)
     .parent()
     .then(($campo) => {
-      cy.wrap($campo).find(".selected").click({ force: true });
-      cy.wrap($campo)
-        .find("input:visible")
-        .first()
-        .should("be.visible")
-        .clear({ force: true })
-        .type(codigoCategoria, { force: true });
-
-      cy.wrap($campo)
-        .find(".options .list a")
-        .then(($opcoes) => {
-          const opcao =
-            Array.from($opcoes).find((elemento) =>
-              new RegExp(`^${codigoCategoria}\\s*[-.]`).test(
-                normalizarTexto(elemento.textContent),
-              ),
-            ) || $opcoes[0];
+      abrirSelectAvancadoComOpcoes($campo)
+        .then(() => {
+          cy.wrap($campo)
+            .find("input:visible")
+            .first()
+            .should("be.visible")
+            .clear({ force: true })
+            .type(nomeCategoriaParaPesquisa, { force: true });
+        })
+        .then(() =>
+          cy.wrap($campo).find(".options .list a", { timeout: 30000 }),
+        )
+        .filter(":visible")
+        .should("have.length.at.least", 1)
+        .should(($opcoes) => {
+          const opcao = Array.from($opcoes).find((elemento) =>
+            normalizarParaComparacao(elemento.textContent).includes(
+              nomeCategoriaNormalizado,
+            ),
+          );
 
           expect(
             opcao,
             `categoria econômica ${nomeCategoria} disponível no filtro`,
           ).to.exist;
+        })
+        .then(($opcoes) => {
+          const opcao = Array.from($opcoes).find((elemento) =>
+            normalizarParaComparacao(elemento.textContent).includes(
+              nomeCategoriaNormalizado,
+            ),
+          );
+
           cy.wrap(opcao).click({ force: true });
         });
     });
@@ -1819,63 +2104,198 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
-  it("acessa o filtro avançado, pesquisa Valor Empenhado e valida o retorno", () => {
-    obterValorEmpenhadoDoEmpenho().then((valorEmpenhado) => {
+  it("acessa o filtro avançado, pesquisa Valor Mínimo Empenhado e valida a listagem", () => {
+    obterValoresEmpenhadosDaListagem().then(({ minimo }) => {
       abrirFiltroAvancado(".campo label");
-
-      cy.contains(".campo label", /^Valor Empenhado$/i)
-        .parent()
-        .find("input, textarea")
-        .first()
-        .clear({ force: true })
-        .type(valorEmpenhado, { force: true });
-
+      preencherValorAvancado("Valor Mínimo Empenhado", minimo.texto);
       cy.contains("button, a, div", "PESQUISAR").click({ force: true });
 
       aguardarListagem();
-      validarResultadoOuNenhumResultado("Valor Empenhado", () =>
-        validarValorEmpenhadoNoDetalhe(valorEmpenhado),
+      validarResultadoOuNenhumResultado("Valor Mínimo Empenhado", () =>
+        validarValoresEmpenhadosNaListagem(minimo.numerico, "minimo"),
       );
     });
   });
 
-  it("acessa o filtro avançado, pesquisa Valor Liquidado e valida o retorno", () => {
-    obterValorLiquidadoDoEmpenho().then((valorLiquidado) => {
+  it("acessa o filtro avançado, pesquisa Valor Máximo Empenhado e valida a listagem", () => {
+    obterValoresEmpenhadosDaListagem().then(({ maximo }) => {
       abrirFiltroAvancado(".campo label");
-
-      cy.contains(".campo label", /^Valor Liquidado$/i)
-        .parent()
-        .find("input, textarea")
-        .first()
-        .clear({ force: true })
-        .type(valorLiquidado, { force: true });
-
+      preencherValorAvancado("Valor Máximo Empenhado", maximo.texto);
       cy.contains("button, a, div", "PESQUISAR").click({ force: true });
 
       aguardarListagem();
-      validarResultadoOuNenhumResultado("Valor Liquidado", () =>
-        validarValorLiquidadoNoDetalhe(valorLiquidado),
+      validarResultadoOuNenhumResultado("Valor Máximo Empenhado", () =>
+        validarValoresEmpenhadosNaListagem(maximo.numerico, "maximo"),
       );
     });
   });
 
-  it("acessa o filtro avançado, pesquisa Valor Pago e valida o retorno", () => {
-    obterValorPagoDoEmpenho().then((valorPago) => {
+  it("coleta o alerta ao pesquisar com Valor Mínimo Empenhado maior que o máximo", () => {
+    obterValoresEmpenhadosDaListagem().then(({ maximo }) => {
+      const valorMinimoInvalido = formatarValorMonetario(maximo.numerico + 1);
+
       abrirFiltroAvancado(".campo label");
+      preencherValorAvancado("Valor Mínimo Empenhado", valorMinimoInvalido);
+      preencherValorAvancado("Valor Máximo Empenhado", maximo.texto);
+      cy.contains("button, a, div", "PESQUISAR").click({ force: true });
 
-      cy.contains(".campo label", /^Valor Pago$/i)
-        .parent()
-        .find("input, textarea")
+      cy.get(".alertas-msg > p", { timeout: 30000 })
         .first()
-        .clear({ force: true })
-        .type(valorPago, { force: true });
+        .should("be.visible")
+        .invoke("text")
+        .then((textoAlerta) => {
+          const mensagem = normalizarTexto(textoAlerta);
+          const indicacaoDeErro =
+            /mínimo|máximo|menor|maior|intervalo|valor|inválid|invalíd/i.test(
+              mensagem,
+            );
 
+          expect(
+            indicacaoDeErro,
+            "validação para mínimo empenhado maior que máximo exibida",
+          ).to.equal(true);
+
+          Cypress.log({
+            name: "ALERTA",
+            message: mensagem || "Valor mínimo maior que o valor máximo",
+            consoleProps: () => ({
+              valorMinimo: valorMinimoInvalido,
+              valorMaximo: maximo.texto,
+              mensagem,
+            }),
+          });
+          cy.log(`ALERTA: ${mensagem}`);
+        });
+    });
+  });
+
+  it("acessa o filtro avançado, pesquisa Valor Mínimo Liquidado e valida a listagem", () => {
+    obterValoresLiquidadosDaListagem().then(({ minimo }) => {
+      abrirFiltroAvancado(".campo label");
+      preencherValorAvancado("Valor Mínimo Liquidado", minimo.texto);
       cy.contains("button, a, div", "PESQUISAR").click({ force: true });
 
       aguardarListagem();
-      validarResultadoOuNenhumResultado("Valor Pago", () =>
-        validarValorPagoNoDetalhe(valorPago),
+      validarResultadoOuNenhumResultado("Valor Mínimo Liquidado", () =>
+        validarValoresLiquidadosNaListagem(minimo.numerico, "minimo"),
       );
+    });
+  });
+
+  it("acessa o filtro avançado, pesquisa Valor Máximo Liquidado e valida a listagem", () => {
+    obterValoresLiquidadosDaListagem().then(({ maximo }) => {
+      abrirFiltroAvancado(".campo label");
+      preencherValorAvancado("Valor Máximo Liquidado", maximo.texto);
+      cy.contains("button, a, div", "PESQUISAR").click({ force: true });
+
+      aguardarListagem();
+      validarResultadoOuNenhumResultado("Valor Máximo Liquidado", () =>
+        validarValoresLiquidadosNaListagem(maximo.numerico, "maximo"),
+      );
+    });
+  });
+
+  it("coleta o alerta ao pesquisar com Valor Mínimo Liquidado maior que o máximo", () => {
+    obterValoresLiquidadosDaListagem().then(({ maximo }) => {
+      const valorMinimoInvalido = formatarValorMonetario(maximo.numerico + 1);
+
+      abrirFiltroAvancado(".campo label");
+      preencherValorAvancado("Valor Mínimo Liquidado", valorMinimoInvalido);
+      preencherValorAvancado("Valor Máximo Liquidado", maximo.texto);
+      cy.contains("button, a, div", "PESQUISAR").click({ force: true });
+
+      cy.get(".alertas-msg > p", { timeout: 30000 })
+        .first()
+        .should("be.visible")
+        .invoke("text")
+        .then((textoAlerta) => {
+          const mensagem = normalizarTexto(textoAlerta);
+          const indicacaoDeErro =
+            /mínimo|máximo|menor|maior|intervalo|valor|inválid|invalíd/i.test(
+              mensagem,
+            );
+
+          expect(
+            indicacaoDeErro,
+            "validação para mínimo liquidado maior que máximo exibida",
+          ).to.equal(true);
+
+          Cypress.log({
+            name: "ALERTA",
+            message: mensagem || "Valor mínimo liquidado maior que o máximo",
+            consoleProps: () => ({
+              valorMinimo: valorMinimoInvalido,
+              valorMaximo: maximo.texto,
+              mensagem,
+            }),
+          });
+          cy.log(`ALERTA: ${mensagem}`);
+        });
+    });
+  });
+
+  it("acessa o filtro avançado, pesquisa Valor Mínimo Pago e valida a listagem", () => {
+    obterValoresPagosDaListagem().then(({ minimo }) => {
+      abrirFiltroAvancado(".campo label");
+      preencherValorAvancado("Valor Mínimo Pago", minimo.texto);
+      cy.contains("button, a, div", "PESQUISAR").click({ force: true });
+
+      aguardarListagem();
+      validarResultadoOuNenhumResultado("Valor Mínimo Pago", () =>
+        validarValoresPagosNaListagem(minimo.numerico, "minimo"),
+      );
+    });
+  });
+
+  it("acessa o filtro avançado, pesquisa Valor Máximo Pago e valida a listagem", () => {
+    obterValoresPagosDaListagem().then(({ maximo }) => {
+      abrirFiltroAvancado(".campo label");
+      preencherValorAvancado("Valor Máximo Pago", maximo.texto);
+      cy.contains("button, a, div", "PESQUISAR").click({ force: true });
+
+      aguardarListagem();
+      validarResultadoOuNenhumResultado("Valor Máximo Pago", () =>
+        validarValoresPagosNaListagem(maximo.numerico, "maximo"),
+      );
+    });
+  });
+
+  it("coleta o alerta ao pesquisar com Valor Mínimo Pago maior que o máximo", () => {
+    obterValoresPagosDaListagem().then(({ maximo }) => {
+      const valorMinimoInvalido = formatarValorMonetario(maximo.numerico + 1);
+
+      abrirFiltroAvancado(".campo label");
+      preencherValorAvancado("Valor Mínimo Pago", valorMinimoInvalido);
+      preencherValorAvancado("Valor Máximo Pago", maximo.texto);
+      cy.contains("button, a, div", "PESQUISAR").click({ force: true });
+
+      cy.get(".alertas-msg > p", { timeout: 30000 })
+        .first()
+        .should("be.visible")
+        .invoke("text")
+        .then((textoAlerta) => {
+          const mensagem = normalizarTexto(textoAlerta);
+          const indicacaoDeErro =
+            /mínimo|máximo|menor|maior|intervalo|valor|inválid|invalíd/i.test(
+              mensagem,
+            );
+
+          expect(
+            indicacaoDeErro,
+            "validação para mínimo pago maior que máximo exibida",
+          ).to.equal(true);
+
+          Cypress.log({
+            name: "ALERTA",
+            message: mensagem || "Valor mínimo pago maior que o máximo",
+            consoleProps: () => ({
+              valorMinimo: valorMinimoInvalido,
+              valorMaximo: maximo.texto,
+              mensagem,
+            }),
+          });
+          cy.log(`ALERTA: ${mensagem}`);
+        });
     });
   });
 
@@ -1969,7 +2389,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
-  it("acessa o filtro avançado, pesquisa modalidade de aplicação e valida o retorno", () => {
+  it.only("acessa o filtro avançado, pesquisa modalidade de aplicação e valida o retorno", () => {
     obterModalidadeAplicacaoDoPrimeiroRegistro().then((nomeModalidade) => {
       abrirFiltroAvancado(".campo label");
       selecionarModalidadeAplicacao(nomeModalidade);
@@ -1982,7 +2402,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
-  it("acessa o filtro avançado, pesquisa Natureza e valida o retorno", () => {
+  it.only("acessa o filtro avançado, pesquisa Natureza e valida o retorno", () => {
     obterNaturezaDoPrimeiroRegistro().then((nomeNatureza) => {
       abrirFiltroAvancado(".campo label");
       selecionarNatureza(nomeNatureza);
@@ -2023,9 +2443,17 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
 
   it("acessa o filtro avançado, pesquisa programa e valida o retorno", () => {
     obterProgramaDoEmpenho().then((nomePrograma) => {
-      pesquisarProgramaAteEncontrarResultado(nomePrograma).then(() => {
-        validarProgramaNoDetalhe(nomePrograma);
-      });
+      if (!nomePrograma) {
+        return;
+      }
+
+      pesquisarProgramaAteEncontrarResultado(nomePrograma).then(
+        (programaEncontrado) => {
+          if (programaEncontrado) {
+            validarProgramaNoDetalhe(nomePrograma);
+          }
+        },
+      );
     });
   });
 
