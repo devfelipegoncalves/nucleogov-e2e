@@ -1,3 +1,15 @@
+/**
+ * Testes E2E do filtro avançado de Despesas no adaptador Centi (CNTDespesas).
+ *
+ * O caminho e o nome do módulo podem ser sobrescritos por Cypress.env para
+ * permitir a execução contra diferentes portais Centi. Os dados de entrada
+ * são obtidos de registros reais e validados no detalhe do resultado.
+ *
+ * Execução:
+ * npm run cy:run -- --spec "cypress/e2e/portal/transparencia/centi/cntdespesas/filtro-avancado.cy.js"
+ */
+
+// Seletores estáveis e configurações compartilhadas pelo fluxo Centi.
 const DESPESAS_PATH =
   Cypress.env("DESPESAS_PATH") || "/cidadao/transparencia/cntdespesas";
 const DESPESAS_NOME = Cypress.env("DESPESAS_NOME") || "cntdespesas";
@@ -313,29 +325,32 @@ function obterValoresEmpenhadosDosDetalhamentos(limite = 5) {
       "empenhos disponíveis para verificar valores empenhados",
     ).to.be.greaterThan(0);
 
-    return cy.wrap(indices).each((indice) => {
-      cy.wrap(linhas[indice]).find(".icon-file").click({ force: true });
+    return cy
+      .wrap(indices)
+      .each((indice) => {
+        cy.wrap(linhas[indice]).find(".icon-file").click({ force: true });
 
-      return cy
-        .get(SELETOR_POPUP_DETALHES, { timeout: 30000 })
-        .should("be.visible")
-        .find("#valor_empenhado")
-        .first()
-        .should("exist")
-        .then(($campo) => {
-          valores.push(obterValorDoCampo($campo));
-          fecharDetalhe();
-        });
-    }).then(() => {
-      const valoresUnicos = [...new Set(valores)].filter(Boolean);
+        return cy
+          .get(SELETOR_POPUP_DETALHES, { timeout: 30000 })
+          .should("be.visible")
+          .find("#valor_empenhado")
+          .first()
+          .should("exist")
+          .then(($campo) => {
+            valores.push(obterValorDoCampo($campo));
+            fecharDetalhe();
+          });
+      })
+      .then(() => {
+        const valoresUnicos = [...new Set(valores)].filter(Boolean);
 
-      expect(
-        valoresUnicos.length,
-        "valores empenhados disponíveis nos detalhamentos",
-      ).to.be.greaterThan(0);
+        expect(
+          valoresUnicos.length,
+          "valores empenhados disponíveis nos detalhamentos",
+        ).to.be.greaterThan(0);
 
-      return cy.wrap(valoresUnicos, { log: false });
-    });
+        return cy.wrap(valoresUnicos, { log: false });
+      });
   });
 }
 
@@ -350,29 +365,32 @@ function obterValoresLiquidadosDosDetalhamentos(limite = 5) {
       "empenhos disponíveis para verificar valores liquidados",
     ).to.be.greaterThan(0);
 
-    return cy.wrap(indices).each((indice) => {
-      cy.wrap(linhas[indice]).find(".icon-file").click({ force: true });
+    return cy
+      .wrap(indices)
+      .each((indice) => {
+        cy.wrap(linhas[indice]).find(".icon-file").click({ force: true });
 
-      return cy
-        .get(SELETOR_POPUP_DETALHES, { timeout: 30000 })
-        .should("be.visible")
-        .find("#liquidacao")
-        .first()
-        .should("exist")
-        .then(($campo) => {
-          valores.push(obterValorDoCampo($campo));
-          fecharDetalhe();
-        });
-    }).then(() => {
-      const valoresUnicos = [...new Set(valores)].filter(Boolean);
+        return cy
+          .get(SELETOR_POPUP_DETALHES, { timeout: 30000 })
+          .should("be.visible")
+          .find("#liquidacao")
+          .first()
+          .should("exist")
+          .then(($campo) => {
+            valores.push(obterValorDoCampo($campo));
+            fecharDetalhe();
+          });
+      })
+      .then(() => {
+        const valoresUnicos = [...new Set(valores)].filter(Boolean);
 
-      expect(
-        valoresUnicos.length,
-        "valores liquidados disponíveis nos detalhamentos",
-      ).to.be.greaterThan(0);
+        expect(
+          valoresUnicos.length,
+          "valores liquidados disponíveis nos detalhamentos",
+        ).to.be.greaterThan(0);
 
-      return cy.wrap(valoresUnicos, { log: false });
-    });
+        return cy.wrap(valoresUnicos, { log: false });
+      });
   });
 }
 
@@ -387,29 +405,32 @@ function obterValoresPagosDosDetalhamentos(limite = 5) {
       "empenhos disponíveis para verificar valores pagos",
     ).to.be.greaterThan(0);
 
-    return cy.wrap(indices).each((indice) => {
-      cy.wrap(linhas[indice]).find(".icon-file").click({ force: true });
+    return cy
+      .wrap(indices)
+      .each((indice) => {
+        cy.wrap(linhas[indice]).find(".icon-file").click({ force: true });
 
-      return cy
-        .get(SELETOR_POPUP_DETALHES, { timeout: 30000 })
-        .should("be.visible")
-        .find("#pagamento")
-        .first()
-        .should("exist")
-        .then(($campo) => {
-          valores.push(obterValorDoCampo($campo));
-          fecharDetalhe();
-        });
-    }).then(() => {
-      const valoresUnicos = [...new Set(valores)].filter(Boolean);
+        return cy
+          .get(SELETOR_POPUP_DETALHES, { timeout: 30000 })
+          .should("be.visible")
+          .find("#pagamento")
+          .first()
+          .should("exist")
+          .then(($campo) => {
+            valores.push(obterValorDoCampo($campo));
+            fecharDetalhe();
+          });
+      })
+      .then(() => {
+        const valoresUnicos = [...new Set(valores)].filter(Boolean);
 
-      expect(
-        valoresUnicos.length,
-        "valores pagos disponíveis nos detalhamentos",
-      ).to.be.greaterThan(0);
+        expect(
+          valoresUnicos.length,
+          "valores pagos disponíveis nos detalhamentos",
+        ).to.be.greaterThan(0);
 
-      return cy.wrap(valoresUnicos, { log: false });
-    });
+        return cy.wrap(valoresUnicos, { log: false });
+      });
   });
 }
 
@@ -972,20 +993,24 @@ function selecionarLicitacaoNoFiltroAvancado(numeroProcesso, indice = 0) {
 }
 
 function obterQuantidadeDeRegistrosSemRetry() {
-  return cy.get("body").then(($body) =>
-    $body
-      .find(SELETOR_LINHAS_VALIDAS)
-      .filter(
-        (_, linha) => !["not-found-line", "template_row"].includes(linha.id),
-      ).length,
-  );
+  return cy
+    .get("body")
+    .then(
+      ($body) =>
+        $body
+          .find(SELETOR_LINHAS_VALIDAS)
+          .filter(
+            (_, linha) =>
+              !["not-found-line", "template_row"].includes(linha.id),
+          ).length,
+    );
 }
 
 function selecionarLicitacaoComResultado(numeroProcesso, indice = 0) {
   abrirFiltroAvancado();
 
-  return selecionarLicitacaoNoFiltroAvancado(numeroProcesso, indice)
-    .then((licitacaoSelecionada) => {
+  return selecionarLicitacaoNoFiltroAvancado(numeroProcesso, indice).then(
+    (licitacaoSelecionada) => {
       pesquisarFiltroAvancadoComOuSemResultado();
 
       return obterQuantidadeDeRegistrosSemRetry().then((quantidade) => {
@@ -1002,7 +1027,8 @@ function selecionarLicitacaoComResultado(numeroProcesso, indice = 0) {
 
         return selecionarLicitacaoComResultado(numeroProcesso, proximoIndice);
       });
-    });
+    },
+  );
 }
 
 function selecionarAnoNoFiltroAvancado(anoEsperado) {
@@ -2179,6 +2205,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
     aguardarListagem();
   });
 
+  // Pesquisa um órgão real e valida o órgão exibido no detalhe.
   it("filtra por órgão e valida o órgão no detalhe do resultado", () => {
     obterOrgaoDoRegistro()
       .then((orgao) => {
@@ -2191,6 +2218,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
       });
   });
 
+  // Pesquisa por credor usando o campo textual do filtro avançado.
   it("filtra por credor usando a busca do filtro avançado e valida a listagem", () => {
     let credorBuscado;
 
@@ -2206,6 +2234,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
       });
   });
 
+  // Identifica automaticamente CPF ou CNPJ e valida o documento retornado.
   it("filtra por CPF/CNPJ e valida o documento no resultado da listagem", () => {
     let documentoBuscado;
 
@@ -2221,6 +2250,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
       });
   });
 
+  // Pesquisa o número do empenho e valida o valor exibido no detalhe.
   it("filtra por número do empenho e valida o número no detalhe do resultado", () => {
     let numeroBuscado;
 
@@ -2236,6 +2266,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
       });
   });
 
+  // Aplica o intervalo de valores empenhados e valida o detalhe.
   it("filtra por valores empenhados e valida o valor no detalhe do resultado", () => {
     obterValoresEmpenhadosDosDetalhamentos().then((valoresEmpenhados) =>
       selecionarValorEmpenhadoComResultado(valoresEmpenhados).then(
@@ -2244,6 +2275,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
     );
   });
 
+  // Aplica o intervalo de valores liquidados e valida o detalhe.
   it("filtra por valores liquidados e valida o valor no detalhe do resultado", () => {
     obterValoresLiquidadosDosDetalhamentos().then((valoresLiquidados) =>
       selecionarValorLiquidadoComResultado(valoresLiquidados).then(
@@ -2252,24 +2284,25 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
     );
   });
 
+  // Aplica o intervalo de valores pagos e valida o detalhe.
   it("filtra por valores pagos e valida o valor no detalhe do resultado", () => {
     obterValoresPagosDosDetalhamentos().then((valoresPagos) =>
-      selecionarValorPagoComResultado(valoresPagos).then(
-        (valorPago) => validarValorPagoNoResultado(valorPago),
+      selecionarValorPagoComResultado(valoresPagos).then((valorPago) =>
+        validarValorPagoNoResultado(valorPago),
       ),
     );
   });
 
+  // Pesquisa o procedimento licitatório e valida uma licitação retornada.
   it("filtra por procedimento licitatório e valida uma licitação retornada", () => {
     obterProcessoLicitatorioDoDetalhamento()
-      .then((numeroProcesso) =>
-        selecionarLicitacaoComResultado(numeroProcesso),
-      )
+      .then((numeroProcesso) => selecionarLicitacaoComResultado(numeroProcesso))
       .then((licitacaoSelecionada) =>
         validarLicitacaoNoResultado(licitacaoSelecionada.texto),
       );
   });
 
+  // Pesquisa pelo ano no campo do filtro avançado.
   it("filtra por ano usando a busca do filtro avançado e valida a listagem", () => {
     let anoBuscado;
 
@@ -2285,6 +2318,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
       });
   });
 
+  // Valida a opção Sim, aceitando dados ou mensagem oficial de ausência.
   it("filtra COVID-19 como Sim e valida dados ou mensagem de ausência", () => {
     abrirFiltroAvancado();
     selecionarCovidNoFiltroAvancado("Sim");
@@ -2292,6 +2326,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
     validarResultadoCovidNoFiltroAvancado("Sim");
   });
 
+  // Valida a opção Não, aceitando dados ou mensagem oficial de ausência.
   it("filtra COVID-19 como Não e valida dados ou mensagem de ausência", () => {
     abrirFiltroAvancado();
     selecionarCovidNoFiltroAvancado("Não");
@@ -2299,6 +2334,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
     validarResultadoCovidNoFiltroAvancado("Não");
   });
 
+  // Pesquisa uma ação real e valida a ação no detalhe.
   it("filtra por ação e valida a ação no detalhe do resultado", () => {
     obterAcaoDoRegistro()
       .then((acao) => {
@@ -2311,6 +2347,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
       });
   });
 
+  // Seleciona uma unidade compatível com o empenho de referência.
   it("filtra por unidade e valida a unidade no detalhe do resultado", () => {
     obterUnidadeDoRegistro()
       .then((unidade) => {
@@ -2323,6 +2360,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
       });
   });
 
+  // Pesquisa a função e valida o campo correspondente no detalhe.
   it("filtra por função e valida a função no detalhe do resultado", () => {
     obterFuncaoDoRegistro()
       .then((funcao) => {
@@ -2335,6 +2373,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
       });
   });
 
+  // Pesquisa a sub-função e valida o campo correspondente no detalhe.
   it("filtra por sub-função e valida a sub-função no detalhe do resultado", () => {
     obterSubfuncaoDoRegistro()
       .then((subfuncao) => {
@@ -2347,6 +2386,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
       });
   });
 
+  // Pesquisa o programa e valida o programa no detalhe.
   it("filtra por programa e valida o programa no detalhe do resultado", () => {
     obterProgramaDoRegistro()
       .then((programa) => {
@@ -2359,6 +2399,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
       });
   });
 
+  // Pesquisa a fonte e valida a fonte no detalhe.
   it("filtra por fonte e valida a fonte no detalhe do resultado", () => {
     obterFonteDoRegistro()
       .then((fonte) => {
@@ -2371,6 +2412,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
       });
   });
 
+  // Pesquisa a categoria econômica e valida o valor no detalhe.
   it("filtra por categoria econômica e valida no detalhe do resultado", () => {
     obterCategoriaEconomicaDoRegistro()
       .then((categoria) => {
@@ -2383,6 +2425,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
       });
   });
 
+  // Pesquisa o grupo usando o campo de busca do select.
   it("filtra por grupo usando a busca e valida o grupo no detalhe do resultado", () => {
     obterGrupoDoRegistro()
       .then((grupo) => {
@@ -2395,6 +2438,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
       });
   });
 
+  // Pesquisa a modalidade de aplicação e valida o resultado.
   it("filtra por modalidade de aplicação usando a busca e valida o resultado", () => {
     obterModalidadeAplicacaoDoRegistro()
       .then((modalidade) => {
@@ -2407,6 +2451,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
       });
   });
 
+  // Pesquisa o elemento da despesa e valida o elemento no detalhe.
   it("filtra por elemento usando a busca e valida o elemento no detalhe do resultado", () => {
     obterElementoDoRegistro()
       .then((elemento) => {

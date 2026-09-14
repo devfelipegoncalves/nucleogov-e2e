@@ -1,3 +1,15 @@
+/**
+ * Testes E2E dos filtros externos do módulo CNTDespesas no adaptador Centi.
+ *
+ * Valida órgão, COVID-19, busca textual e períodos usando os controles que
+ * ficam diretamente na listagem. DESPESAS_PATH e DESPESAS_NOME podem ser
+ * configurados por ambiente para reutilizar o spec em diferentes portais.
+ *
+ * Execução:
+ * npm run cy:run -- --spec "cypress/e2e/portal/transparencia/centi/cntdespesas/filtros-externos.cy.js"
+ */
+
+// Seletores dos componentes customizados usados pelos filtros externos.
 const DESPESAS_PATH =
   Cypress.env("DESPESAS_PATH") || "/cidadao/transparencia/cntdespesas";
 const DESPESAS_NOME = Cypress.env("DESPESAS_NOME") || "cntdespesas";
@@ -572,6 +584,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtros externos`, () => {
     aguardarListagem();
   });
 
+  // Obtém um órgão real, aplica o filtro externo e valida os resultados.
   it("identifica o órgão de um registro, pesquisa pelo órgão e valida os resultados", () => {
     identificarOrgaoNoDetalhe()
       .then((orgaoIdentificado) => {
@@ -583,6 +596,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtros externos`, () => {
       });
   });
 
+  // Executa as duas opções de COVID-19 e valida cada retorno.
   it("filtra COVID-19 como Sim e depois como Não, validando cada retorno", () => {
     selecionarOpcaoCovid("Sim")
       .then(() => validarResultadoCovid("Sim"))
@@ -590,12 +604,14 @@ describe(`Portal: ${DESPESAS_NOME} - filtros externos`, () => {
       .then(() => validarResultadoCovid("Não"));
   });
 
+  // Realiza uma busca textual e confere o favorecido da listagem.
   it("filtra pela busca textual e valida o favorecido retornado", () => {
     obterTermoDaListagem().then((termoBuscado) => {
       pesquisarTextoEValidar(termoBuscado);
     });
   });
 
+  // Valida as datas retornadas para o intervalo dos últimos sete dias.
   it("filtra pelos últimos 7 dias e valida as datas retornadas", () => {
     selecionarPeriodo("Últimos 7 dias").then(() => {
       cy.get("#filtro_periodo .selected", { timeout: 30000 }).should(
@@ -606,6 +622,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtros externos`, () => {
     });
   });
 
+  // Seleciona um ano no filtro de período e valida a listagem.
   it("filtra por ano no select de período", () => {
     const anoAtual = new Date().getFullYear();
     const periodos = [
@@ -620,6 +637,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtros externos`, () => {
     });
   });
 
+  // Seleciona um mês no filtro de período e valida a listagem.
   it("filtra por mês no select de período", () => {
     selecionarPeriodoPorPrefixo("Mês de").then(({ id }) => {
       const periodo = montarPeriodoMensal(id);
@@ -629,6 +647,7 @@ describe(`Portal: ${DESPESAS_NOME} - filtros externos`, () => {
     });
   });
 
+  // Usa o popup de intervalo para selecionar mês e ano explicitamente.
   it("filtra por mês e ano no popup de intervalo", () => {
     const anoAtual = new Date().getFullYear();
     const anoAnterior = anoAtual - 1;

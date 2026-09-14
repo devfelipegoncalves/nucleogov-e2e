@@ -1,3 +1,16 @@
+/**
+ * Testes E2E do filtro avançado de Despesas no adaptador Megasoft.
+ *
+ * Os cenários usam valores reais da listagem/detalhamento, aplicam filtros no
+ * popup avançado e validam o retorno ou os alertas de validação do formulário.
+ * A implementação é específica do layout Megasoft, embora os conceitos sejam
+ * equivalentes aos testes Prodata.
+ *
+ * Execução:
+ * npm run cy:run -- --spec "cypress/e2e/portal/transparencia/megasoft/sgdespesas/filtro-avancado.cy.js"
+ */
+
+// Configuração da rota e identificação usadas nas mensagens do spec.
 const SG_DESPESAS_PATH = "/cidadao/transparencia/sgdespesas";
 const SG_DESPESAS_NOME = "sgdespesas";
 const LISTAGEM_TIMEOUT = 60000;
@@ -2036,6 +2049,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     prepararListagemComFavorecido();
   });
 
+  // Pesquisa o favorecido real do empenho e valida a listagem retornada.
   it("acessa o filtro avançado, pesquisa favorecido e valida a listagem filtrada", () => {
     obterFavorecidoDoPrimeiroRegistro().then((favorecido) => {
       abrirFiltroAvancado();
@@ -2052,6 +2066,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Pesquisa o histórico completo e valida o conteúdo do detalhe.
   it("acessa o filtro avançado, pesquisa Histórico do Empenho e valida o retorno", () => {
     obterHistoricoDoPrimeiroRegistro().then((historico) => {
       abrirFiltroAvancado(".campo label");
@@ -2071,6 +2086,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Pesquisa um CPF/CNPJ real e confere o documento retornado.
   it("acessa o filtro avançado, pesquisa CPF/CNPJ e valida o retorno", () => {
     obterCnpjDeUmRegistro().then((cnpj) => {
       abrirFiltroAvancado("#cpfCnpj");
@@ -2088,6 +2104,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Pesquisa o número real do empenho e valida o mesmo número no detalhe.
   it("acessa o filtro avançado, pesquisa Nº Empenho e valida o retorno", () => {
     obterNumeroDoPrimeiroRegistro().then((numeroEmpenho) => {
       abrirFiltroAvancado("#numero");
@@ -2104,6 +2121,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Valida o limite inferior dos valores empenhados.
   it("acessa o filtro avançado, pesquisa Valor Mínimo Empenhado e valida a listagem", () => {
     obterValoresEmpenhadosDaListagem().then(({ minimo }) => {
       abrirFiltroAvancado(".campo label");
@@ -2117,6 +2135,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Valida o limite superior dos valores empenhados.
   it("acessa o filtro avançado, pesquisa Valor Máximo Empenhado e valida a listagem", () => {
     obterValoresEmpenhadosDaListagem().then(({ maximo }) => {
       abrirFiltroAvancado(".campo label");
@@ -2130,6 +2149,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Confirma o alerta para intervalo empenhado inconsistente.
   it("coleta o alerta ao pesquisar com Valor Mínimo Empenhado maior que o máximo", () => {
     obterValoresEmpenhadosDaListagem().then(({ maximo }) => {
       const valorMinimoInvalido = formatarValorMonetario(maximo.numerico + 1);
@@ -2169,6 +2189,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Valida o limite inferior dos valores liquidados.
   it("acessa o filtro avançado, pesquisa Valor Mínimo Liquidado e valida a listagem", () => {
     obterValoresLiquidadosDaListagem().then(({ minimo }) => {
       abrirFiltroAvancado(".campo label");
@@ -2182,6 +2203,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Valida o limite superior dos valores liquidados.
   it("acessa o filtro avançado, pesquisa Valor Máximo Liquidado e valida a listagem", () => {
     obterValoresLiquidadosDaListagem().then(({ maximo }) => {
       abrirFiltroAvancado(".campo label");
@@ -2195,6 +2217,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Confirma o alerta para intervalo liquidado inconsistente.
   it("coleta o alerta ao pesquisar com Valor Mínimo Liquidado maior que o máximo", () => {
     obterValoresLiquidadosDaListagem().then(({ maximo }) => {
       const valorMinimoInvalido = formatarValorMonetario(maximo.numerico + 1);
@@ -2234,6 +2257,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Valida o limite inferior dos valores pagos.
   it("acessa o filtro avançado, pesquisa Valor Mínimo Pago e valida a listagem", () => {
     obterValoresPagosDaListagem().then(({ minimo }) => {
       abrirFiltroAvancado(".campo label");
@@ -2247,6 +2271,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Valida o limite superior dos valores pagos.
   it("acessa o filtro avançado, pesquisa Valor Máximo Pago e valida a listagem", () => {
     obterValoresPagosDaListagem().then(({ maximo }) => {
       abrirFiltroAvancado(".campo label");
@@ -2260,6 +2285,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Confirma o alerta para intervalo pago inconsistente.
   it("coleta o alerta ao pesquisar com Valor Mínimo Pago maior que o máximo", () => {
     obterValoresPagosDaListagem().then(({ maximo }) => {
       const valorMinimoInvalido = formatarValorMonetario(maximo.numerico + 1);
@@ -2299,6 +2325,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Pesquisa o intervalo de datas e valida a consulta.
   it("acessa o filtro avançado, pesquisa Data inicial e Data final e valida o retorno", () => {
     obterDatasInicialEFinalDaListagem().then(({ dataInicial, dataFinal }) => {
       abrirFiltroAvancado("#data_i");
@@ -2320,6 +2347,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Seleciona o órgão e confere o resultado no detalhe.
   it("acessa o filtro avançado, pesquisa órgão e valida o retorno", () => {
     obterOrgaoDoPrimeiroRegistro().then((nomeOrgao) => {
       abrirFiltroAvancado("#select_org_avanc");
@@ -2333,6 +2361,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Seleciona uma unidade válida para o empenho de referência.
   it("acessa o filtro avançado, pesquisa unidade e valida o retorno", () => {
     obterUnidadesDisponiveisNoFiltro().then((unidadesDisponiveis) => {
       obterUnidadeDoRegistroPesquisavel(unidadesDisponiveis).then(
@@ -2350,6 +2379,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Pesquisa a função por texto/código e valida o detalhe.
   it("acessa o filtro avançado, pesquisa função e valida o retorno", () => {
     obterFuncaoDoPrimeiroRegistro().then((nomeFuncao) => {
       abrirFiltroAvancado("#select_funcao");
@@ -2363,6 +2393,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Pesquisa a subfunção por texto/código e valida o detalhe.
   it("acessa o filtro avançado, pesquisa subfunção e valida o retorno", () => {
     obterSubfuncaoDoPrimeiroRegistro().then((nomeSubfuncao) => {
       abrirFiltroAvancado(".campo label");
@@ -2376,6 +2407,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Pesquisa o grupo orçamentário e valida o retorno.
   it("acessa o filtro avançado, pesquisa grupo e valida o retorno", () => {
     obterGrupoDoPrimeiroRegistro().then((nomeGrupo) => {
       abrirFiltroAvancado(".campo label");
@@ -2389,6 +2421,8 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Pesquisa a modalidade de aplicação e valida o retorno. O it.only já
+  // existia no arquivo e foi preservado para não alterar o fluxo do usuário.
   it.only("acessa o filtro avançado, pesquisa modalidade de aplicação e valida o retorno", () => {
     obterModalidadeAplicacaoDoPrimeiroRegistro().then((nomeModalidade) => {
       abrirFiltroAvancado(".campo label");
@@ -2402,6 +2436,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Pesquisa a natureza da despesa e valida o retorno.
   it.only("acessa o filtro avançado, pesquisa Natureza e valida o retorno", () => {
     obterNaturezaDoPrimeiroRegistro().then((nomeNatureza) => {
       abrirFiltroAvancado(".campo label");
@@ -2415,6 +2450,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Pesquisa o elemento da despesa e valida o retorno.
   it("acessa o filtro avançado, pesquisa Elemento e valida o retorno", () => {
     obterElementoDoPrimeiroRegistro().then((nomeElemento) => {
       abrirFiltroAvancado(".campo label");
@@ -2428,6 +2464,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Pesquisa uma ação vinculada ao empenho.
   it("acessa o filtro avançado, pesquisa Ações e valida o retorno", () => {
     obterAcoesDoPrimeiroRegistro().then((nomeAcoes) => {
       abrirFiltroAvancado(".campo label");
@@ -2441,6 +2478,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Pesquisa o programa vinculado ao empenho.
   it("acessa o filtro avançado, pesquisa programa e valida o retorno", () => {
     obterProgramaDoEmpenho().then((nomePrograma) => {
       if (!nomePrograma) {
@@ -2457,6 +2495,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Pesquisa a fonte e valida o resultado no detalhe.
   it("acessa o filtro avançado, pesquisa fonte e valida o retorno", () => {
     obterFonteDoEmpenho().then((nomeFonte) => {
       abrirFiltroAvancado(".campo label");
@@ -2475,6 +2514,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Pesquisa a categoria econômica e valida o resultado no detalhe.
   it("acessa o filtro avançado, pesquisa categoria econômica e valida o retorno", () => {
     obterCategoriaEconomicaDoPrimeiroRegistro().then((nomeCategoria) => {
       abrirFiltroAvancado(".campo label");
@@ -2506,6 +2546,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
+  // Confirma o alerta quando a data inicial é posterior à data final.
   it("coleta o alerta ao pesquisar com data inicial maior que data final", () => {
     abrirFiltroAvancado("#data_i");
 

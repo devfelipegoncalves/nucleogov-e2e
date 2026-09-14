@@ -1,6 +1,22 @@
+/**
+ * Testes E2E dos filtros disponíveis diretamente na listagem do SGDespesas.
+ *
+ * Este arquivo cobre os controles que ficam fora do popup de filtro avançado:
+ * órgão, COVID-19, tipo, busca textual e período. Cada cenário inicia em uma
+ * listagem carregada, aplica um filtro e valida o resultado exibido.
+ *
+ * Execução interativa:
+ * npm run cy:open -- --e2e --spec "cypress/e2e/portal/transparencia/prodata/sgdespesas/filtros-externos.cy.js"
+ *
+ * Execução headless:
+ * npm run cy:run -- --spec "cypress/e2e/portal/transparencia/prodata/sgdespesas/filtros-externos.cy.js"
+ */
+
+// Identificação da página usada em todas as visitas e mensagens de diagnóstico.
 const SG_DESPESAS_PATH = "/cidadao/transparencia/sgdespesas";
 const SG_DESPESAS_NOME = "sgdespesas";
 
+// Mantém o texto comparável mesmo quando o portal altera espaços ou formatação.
 function normalizarTexto(texto = "") {
   return texto.replace(/\s+/g, " ").trim();
 }
@@ -129,6 +145,8 @@ function orgaosCorrespondem(nomeEsperado, nomeEncontrado) {
   return termosEsperados.some((termo) => termosEncontrados.includes(termo));
 }
 
+// Aguarda a primeira listagem completa antes de ler um empenho ou selecionar
+// um filtro externo.
 function aguardarListagem() {
   cy.get(".loader", { timeout: 30000 }).should("not.exist");
   cy.get(".cont_dados", { timeout: 30000 }).should("be.visible");
@@ -137,6 +155,8 @@ function aguardarListagem() {
     .should("have.length.at.least", 1);
 }
 
+// Obtém do primeiro registro um órgão real para usar como dado de entrada do
+// cenário, evitando depender de códigos fixos no ambiente.
 function obterOrgaoDoPortal() {
   cy.get(".cont_dados .tb tr[id]")
     .filter((_, row) => !["not-found-line", "template_row"].includes(row.id))
@@ -163,6 +183,7 @@ function obterOrgaoDoPortal() {
     });
 }
 
+// Seleciona o órgão pelo código quando possível e usa o nome como fallback.
 function selecionarOrgaoDoPortal(orgaoDoPortal) {
   const nomeOrgao = obterNomeOrgaoParaPesquisa(orgaoDoPortal);
 
@@ -206,6 +227,7 @@ function selecionarOrgaoDoPortal(orgaoDoPortal) {
   });
 }
 
+// Seleciona uma opção de um select customizado do portal pelo texto exibido.
 function selecionarOpcao(containerSelector, textoOpcao) {
   cy.get(containerSelector).find(".selected").click({ force: true });
   cy.contains(`${containerSelector} .options .list a`, textoOpcao, {
@@ -213,6 +235,7 @@ function selecionarOpcao(containerSelector, textoOpcao) {
   }).click({ force: true });
 }
 
+// Aguarda o término do filtro externo e a remoção do loader da tabela.
 function aguardarRetornoDoFiltro() {
   cy.get(".loader", { timeout: 30000 }).should("not.exist");
   cy.get(".cont_dados", { timeout: 30000 }).should("be.visible");
@@ -224,11 +247,14 @@ function validarPeriodoExibido(inicial, final) {
   cy.get(".periodo-pesquisa .periodo-final").should("contain", final);
 }
 
+// Converte uma data brasileira para um número comparável no formato AAAAMMDD.
 function dataParaNumero(data) {
   const [dia, mes, ano] = data.split("/");
   return Number(`${ano}${mes}${dia}`);
 }
 
+// Confere cada data retornada contra o intervalo solicitado. Lista vazia é
+// aceita somente quando o portal exibe sua mensagem oficial de ausência.
 function validarDatasDaListagemNoPeriodo(inicial, final) {
   const dataInicial = dataParaNumero(inicial);
   const dataFinal = dataParaNumero(final);
@@ -300,11 +326,13 @@ function montarPeriodoAnual(ano) {
   };
 }
 
+// Seleciona um período pré-configurado e aguarda a atualização da listagem.
 function selecionarPeriodo(textoOpcao) {
   selecionarOpcao("#filtro_periodo", textoOpcao);
   aguardarRetornoDoFiltro();
 }
 
+// Abre o calendário para que o teste possa trocar ano e mês manualmente.
 function abrirCalendarioPeriodo() {
   cy.get("#filtro_periodo .filtro_intervalo").click({ force: true });
   cy.get("#popup_intervalo", { timeout: 30000 }).should("exist");
@@ -340,6 +368,7 @@ function validarOrgaoNoDetalhe(orgaoSelecionado) {
 
 // Executa a mesma sequência para Sim e Não. Sim deve retornar empenhos; para
 // Não, o portal pode retornar empenhos ou a mensagem oficial de lista vazia.
+// O resultado é registrado no log para facilitar a análise no Cypress.
 function pesquisarCovidEValidarListagem(opcao) {
   selecionarOpcao("#search_coronavirus", opcao);
   aguardarRetornoDoFiltro();
@@ -557,6 +586,7 @@ function normalizarParaComparacao(texto) {
     .toLowerCase();
 }
 
+// Confere se pelo menos uma linha contém o valor pesquisado na coluna esperada.
 function validarCampoNaListagem(linhas, textoBuscado, obterCampo, nomeCampo) {
   const textoNormalizado = normalizarParaComparacao(textoBuscado);
   const valores = Array.from(linhas).map((linha) =>
@@ -571,6 +601,7 @@ function validarCampoNaListagem(linhas, textoBuscado, obterCampo, nomeCampo) {
   ).to.equal(true);
 }
 
+// Executa uma busca textual no campo externo e valida o conteúdo retornado.
 function pesquisarTextoEValidarCampo(textoBuscado, obterCampo, nomeCampo) {
   cy.get(".filtro > .containerbusca > input#search")
     .clear()
@@ -603,6 +634,8 @@ function pesquisarTextoEValidarCampo(textoBuscado, obterCampo, nomeCampo) {
   });
 }
 
+// Executa sequencialmente buscas por movimento, favorecido e descrição usando
+// os dados da mesma linha para garantir que todos os campos sejam pesquisáveis.
 function pesquisarNomeMovimentoFavorecidoEDescricao() {
   return obterDadosParaBuscaTextual().then((dados) =>
     pesquisarTextoEValidarCampo(
@@ -638,12 +671,14 @@ function pesquisarNomeMovimentoFavorecidoEDescricao() {
 }
 
 describe(`Portal: ${SG_DESPESAS_NOME} - filtros externos`, () => {
+  // Todos os cenários começam com a listagem e o filtro externo visíveis.
   beforeEach(() => {
     cy.visitPortal(SG_DESPESAS_PATH);
     cy.get(".filtro", { timeout: 30000 }).should("be.visible");
     aguardarListagem();
   });
 
+  // Obtém o órgão do detalhe, filtra a listagem e valida o órgão retornado.
   it("filtra por órgão e valida o campo no detalhe do resultado", () => {
     obterOrgaoDoPortal().then((orgaoDoPortal) => {
       selecionarOrgaoDoPortal(orgaoDoPortal).then((orgaoSelecionado) => {
@@ -653,30 +688,37 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtros externos`, () => {
     });
   });
 
+  // Valida a opção Sim do filtro COVID-19 e registra o resultado encontrado.
   it("filtra COVID-19 como Sim e verifica a listagem", () => {
     pesquisarCovidEValidarListagem("Sim");
   });
 
+  // Valida a opção Não, aceitando registros ou a mensagem oficial de lista vazia.
   it("filtra COVID-19 como Não e verifica a listagem", () => {
     pesquisarCovidEValidarListagem("Não");
   });
 
+  // Confere que o select Tipo contém Empenho e valida a listagem filtrada.
   it("filtra por Tipo: Empenho e verifica a listagem", () => {
     pesquisarTipoEValidarListagem("Empenho");
   });
 
+  // Confere o retorno do filtro Tipo para Liquidação.
   it("filtra por Tipo: Liquidação e verifica a listagem", () => {
     pesquisarTipoEValidarListagem("Liquidação");
   });
 
+  // Confere o retorno do filtro Tipo para Pagamento.
   it("filtra por Tipo: Pagamento e verifica a listagem", () => {
     pesquisarTipoEValidarListagem("Pagamento");
   });
 
+  // Executa as três buscas textuais disponíveis na listagem.
   it("realiza busca textual por nome do movimento, favorecido e descrição", () => {
     pesquisarNomeMovimentoFavorecidoEDescricao();
   });
 
+  // Verifica o intervalo dinâmico dos sete dias anteriores até hoje.
   it("filtra por últimos 7 dias no select de período", () => {
     const hoje = new Date();
     const seteDiasAtras = new Date(hoje);
@@ -690,6 +732,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtros externos`, () => {
     );
   });
 
+  // Valida os períodos do ano atual e do ano anterior.
   it("filtra por anos no select de período", () => {
     const anoAtual = new Date().getFullYear();
     const periodos = [
@@ -704,6 +747,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtros externos`, () => {
     });
   });
 
+  // Navega no calendário, troca o ano e valida março e janeiro do ano anterior.
   it("filtra por mês e ano no calendário de período", () => {
     const anoAtual = new Date().getFullYear();
     const anoAnterior = anoAtual - 1;

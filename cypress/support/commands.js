@@ -2,97 +2,117 @@ const { buildManifestacaoOuvidoria } = require("./helpers/ouvidoria");
 const { buildSolicitacaoSic } = require("./helpers/sic");
 
 function assertAssetsLoaded() {
-  cy.document().then((doc) => {
+  const timeout = 60000;
+
+  // Os assets podem ser inseridos pelo bootstrap depois do evento load.
+  // O should faz a verificação ser repetida até CSS e JS estarem disponíveis.
+  cy.document({ timeout }).should((doc) => {
     const cssLinks = Array.from(
-      doc.querySelectorAll("link[rel='stylesheet'][href*='/res/']")
+      doc.querySelectorAll("link[rel='stylesheet'][href*='/res/']"),
     );
     const jsScripts = Array.from(
-      doc.querySelectorAll("script[src*='/res/js/'], script[src*='require.min.js']")
+      doc.querySelectorAll(
+        "script[src*='/res/js/'], script[src*='require.min.js']",
+      ),
     );
+    const cssAplicados = cssLinks.filter((link) => link.sheet).length;
 
-    expect(cssLinks.length, "folhas de estilo do Nucleogov").to.be.greaterThan(0);
+    expect(doc.readyState, "documento pronto").to.equal("complete");
+    expect(cssLinks.length, "folhas de estilo do Nucleogov").to.be.greaterThan(
+      0,
+    );
+    expect(cssAplicados, "folhas de estilo do Nucleogov aplicadas").to.equal(
+      cssLinks.length,
+    );
     expect(jsScripts.length, "scripts do Nucleogov").to.be.greaterThan(0);
-    expect(doc.styleSheets.length, "stylesheets aplicadas no documento").to.be.greaterThan(0);
+    expect(
+      doc.styleSheets.length,
+      "stylesheets aplicadas no documento",
+    ).to.be.greaterThan(0);
   });
 
-  cy.window().should((win) => {
-    expect(
-      Boolean(win.requirejs || win.require),
-      "loader JS carregado"
-    ).to.equal(true);
+  cy.window({ timeout }).should((win) => {
+    const recursos = win.performance.getEntriesByType("resource");
+    const cssCarregado = recursos.some(
+      (entry) =>
+        entry.responseEnd > 0 &&
+        (entry.name.includes("/res/css/") ||
+          /\.css(?:[?#]|$)/i.test(entry.name)),
+    );
+    const jsCarregado = recursos.some(
+      (entry) =>
+        entry.responseEnd > 0 &&
+        (entry.name.includes("/res/js/") ||
+          entry.name.includes("require.min.js") ||
+          /\.js(?:[?#]|$)/i.test(entry.name)),
+    );
 
-    const resources = win.performance
-      .getEntriesByType("resource")
-      .map((entry) => entry.name);
-
-    expect(
-      resources.some((resource) => resource.includes("/res/css/")),
-      "CSS carregado pelo browser"
-    ).to.equal(true);
-
-    expect(
-      resources.some(
-        (resource) =>
-          resource.includes("/res/js/") || resource.includes("require.min.js")
-      ),
-      "JS carregado pelo browser"
-    ).to.equal(true);
+    expect(cssCarregado, "CSS carregado pelo browser").to.equal(true);
+    expect(jsCarregado, "JS carregado pelo browser").to.equal(true);
   });
 }
 
 // O projeto usa selects customizados; este helper abstrai a abertura da lista e a escolha por texto.
 Cypress.Commands.add("selectCustomOption", (containerSelector, optionLabel) => {
-  cy.get(`${containerSelector} .selected`).should("be.visible").click({ force: true });
+  cy.get(`${containerSelector} .selected`)
+    .should("be.visible")
+    .click({ force: true });
   cy.get(`${containerSelector} .options`).should("be.visible");
-  cy.contains(`${containerSelector} .options .list a`, optionLabel).click({ force: true });
+  cy.contains(`${containerSelector} .options .list a`, optionLabel).click({
+    force: true,
+  });
   cy.get(`${containerSelector} .selected p`).should("contain", optionLabel);
 });
 
 // Quando o cenário não depende de uma opção específica, seleciona aleatoriamente uma opção disponível.
 Cypress.Commands.add("selectCustomRandomOption", (containerSelector) => {
-  cy.get(`${containerSelector} .selected`).should("be.visible").click({ force: true });
-  cy.get(`${containerSelector} .options .list a`)
-    .then(($options) => {
-      const randomIndex = Cypress._.random(0, $options.length - 1);
-      const $option = $options.eq(randomIndex);
-      const label = $option.text().trim();
-
-      cy.wrap($option).click({ force: true });
-      cy.get(`${containerSelector} .selected p`).should("contain", label);
-    });
-});
-
-// Alguns campos opcionais dependem de selects encadeados; este helper seleciona opções aleatórias.
-Cypress.Commands.add("preencherCamposOpcionaisCadastroOuvidoria", (overrides = {}) => {
-  const solicitacao = buildManifestacaoOuvidoria(overrides);
-
-  if (!solicitacao.preencherCamposOpcionais) {
-    return;
-  }
-
-  cy.get("#data_nasc").clear().type(solicitacao.dataNascimento);
-  // O datepicker do campo de data fica aberto e pode cobrir os demais inputs se não perder o foco.
-  cy.get("body").click(0, 0, { force: true });
-  cy.get("#cep").clear().type(solicitacao.cep);
-  cy.get("#endereco").clear().type(solicitacao.endereco);
-
-  cy.selectCustomRandomOption("#profissao");
-  cy.selectCustomRandomOption("#sexo");
-  cy.selectCustomRandomOption("#raca");
-  cy.selectCustomRandomOption("#escolaridade");
-  cy.selectCustomRandomOption("#estado_id");
-
-  cy.get("#cidade_id .selected").click({ force: true });
-  cy.get("#cidade_id .options .list a").should("have.length.greaterThan", 0);
-  cy.get("#cidade_id .options .list a").then(($options) => {
+  cy.get(`${containerSelector} .selected`)
+    .should("be.visible")
+    .click({ force: true });
+  cy.get(`${containerSelector} .options .list a`).then(($options) => {
     const randomIndex = Cypress._.random(0, $options.length - 1);
     const $option = $options.eq(randomIndex);
     const label = $option.text().trim();
 
     cy.wrap($option).click({ force: true });
-    cy.get("#cidade_id .selected p").should("contain", label);
+    cy.get(`${containerSelector} .selected p`).should("contain", label);
   });
 });
+
+// Alguns campos opcionais dependem de selects encadeados; este helper seleciona opções aleatórias.
+Cypress.Commands.add(
+  "preencherCamposOpcionaisCadastroOuvidoria",
+  (overrides = {}) => {
+    const solicitacao = buildManifestacaoOuvidoria(overrides);
+
+    if (!solicitacao.preencherCamposOpcionais) {
+      return;
+    }
+
+    cy.get("#data_nasc").clear().type(solicitacao.dataNascimento);
+    // O datepicker do campo de data fica aberto e pode cobrir os demais inputs se não perder o foco.
+    cy.get("body").click(0, 0, { force: true });
+    cy.get("#cep").clear().type(solicitacao.cep);
+    cy.get("#endereco").clear().type(solicitacao.endereco);
+
+    cy.selectCustomRandomOption("#profissao");
+    cy.selectCustomRandomOption("#sexo");
+    cy.selectCustomRandomOption("#raca");
+    cy.selectCustomRandomOption("#escolaridade");
+    cy.selectCustomRandomOption("#estado_id");
+
+    cy.get("#cidade_id .selected").click({ force: true });
+    cy.get("#cidade_id .options .list a").should("have.length.greaterThan", 0);
+    cy.get("#cidade_id .options .list a").then(($options) => {
+      const randomIndex = Cypress._.random(0, $options.length - 1);
+      const $option = $options.eq(randomIndex);
+      const label = $option.text().trim();
+
+      cy.wrap($option).click({ force: true });
+      cy.get("#cidade_id .selected p").should("contain", label);
+    });
+  },
+);
 
 Cypress.Commands.add("visitPage", (path, options = {}) => {
   cy.visit(path, options);
@@ -107,8 +127,12 @@ Cypress.Commands.add("loginAdmin", (overrides = {}) => {
   cy.get("body").then(($body) => {
     if ($body.find("[name='login']").length > 0) {
       cy.get("[name='login']").should("be.visible").type(user);
-      cy.get("[name='senha']").should("be.visible").type(password, { log: false });
-      cy.get("input[type='button'], button[type='submit'], input[type='submit']")
+      cy.get("[name='senha']")
+        .should("be.visible")
+        .type(password, { log: false });
+      cy.get(
+        "input[type='button'], button[type='submit'], input[type='submit']",
+      )
         .first()
         .click();
     }
@@ -126,40 +150,57 @@ Cypress.Commands.add("visitPortal", (path = "/") => {
 Cypress.Commands.add("abrirManifestacaoOuvidoriaNoPainel", (protocolo) => {
   const protocoloNormalizado = String(protocolo).replace(/\D/g, "");
 
-  cy.visitPage(`/painel/ouvidoria/manifestacoes?protocolo=${protocoloNormalizado}`);
+  cy.visitPage(
+    `/painel/ouvidoria/manifestacoes?protocolo=${protocoloNormalizado}`,
+  );
   cy.get("#popup_manifestacao", { timeout: 20000 }).should("be.visible");
-  cy.get("#popup_manifestacao .copy_protocolo span").should("contain", protocoloNormalizado);
+  cy.get("#popup_manifestacao .copy_protocolo span").should(
+    "contain",
+    protocoloNormalizado,
+  );
 });
 
 // O Nucleogov usa Uploadifive; o input de arquivo é recriado a cada upload e precisa ser reconsultado.
-Cypress.Commands.add("anexarArquivosUpload", (scopeSelector, arquivos = [], _titleSelector) => {
-  cy.wrap(arquivos).each((arquivo) => {
-    cy.get(`${scopeSelector} input[type='file']`)
-      .last()
-      .selectFile(
-        {
-          contents: Cypress.Buffer.from(arquivo.contents),
-          fileName: arquivo.fileName,
-          mimeType: arquivo.mimeType || "text/csv",
-          lastModified: Date.now()
-        },
-        { force: true }
-      );
+Cypress.Commands.add(
+  "anexarArquivosUpload",
+  (scopeSelector, arquivos = [], _titleSelector) => {
+    cy.wrap(arquivos).each((arquivo) => {
+      cy.get(`${scopeSelector} input[type='file']`)
+        .last()
+        .selectFile(
+          {
+            contents: Cypress.Buffer.from(arquivo.contents),
+            fileName: arquivo.fileName,
+            mimeType: arquivo.mimeType || "text/csv",
+            lastModified: Date.now(),
+          },
+          { force: true },
+        );
 
-    // O item anexado pode ser remontado por JS logo após o upload, então a verificação olha o container inteiro.
-    cy.contains(scopeSelector, arquivo.fileName, { timeout: 20000 }).should("be.visible");
-  });
-});
+      // O item anexado pode ser remontado por JS logo após o upload, então a verificação olha o container inteiro.
+      cy.contains(scopeSelector, arquivo.fileName, { timeout: 20000 }).should(
+        "be.visible",
+      );
+    });
+  },
+);
 
 // O acompanhamento público exige protocolo e código de acesso para abrir a manifestação.
-Cypress.Commands.add("acompanharManifestacaoOuvidoria", (protocolo, codigoAcesso) => {
-  cy.visitPortal("/ouvidoria/ouvidoria_acompanhar");
-  cy.get("#numero_protocolo").clear().type(String(protocolo).replace(/\D/g, ""));
-  cy.get("#codigo_acesso").clear().type(String(codigoAcesso).replace(/\D/g, ""));
-  cy.get("#buttons_next").click();
-  cy.url({ timeout: 20000 }).should("include", "/ouvidoria/manifestacao/id=");
-  cy.get(".manifestacao_header", { timeout: 20000 }).should("be.visible");
-});
+Cypress.Commands.add(
+  "acompanharManifestacaoOuvidoria",
+  (protocolo, codigoAcesso) => {
+    cy.visitPortal("/ouvidoria/ouvidoria_acompanhar");
+    cy.get("#numero_protocolo")
+      .clear()
+      .type(String(protocolo).replace(/\D/g, ""));
+    cy.get("#codigo_acesso")
+      .clear()
+      .type(String(codigoAcesso).replace(/\D/g, ""));
+    cy.get("#buttons_next").click();
+    cy.url({ timeout: 20000 }).should("include", "/ouvidoria/manifestacao/id=");
+    cy.get(".manifestacao_header", { timeout: 20000 }).should("be.visible");
+  },
+);
 
 // Abre qualquer manifestação pública da Ouvidoria e conclui apenas o primeiro passo.
 Cypress.Commands.add("iniciarManifestacaoOuvidoria", (overrides = {}) => {
@@ -181,7 +222,7 @@ Cypress.Commands.add("iniciarManifestacaoOuvidoria", (overrides = {}) => {
     cy.anexarArquivosUpload(
       ".step_manifestacao_anexo",
       manifestacao.anexos,
-      ".step_manifestacao_anexo_titulo"
+      ".step_manifestacao_anexo_titulo",
     );
   }
 
@@ -193,7 +234,7 @@ Cypress.Commands.add("iniciarManifestacaoOuvidoria", (overrides = {}) => {
 Cypress.Commands.add("iniciarSolicitacaoOuvidoria", (overrides = {}) => {
   cy.iniciarManifestacaoOuvidoria({
     tipo: "solicitacaoservico",
-    ...overrides
+    ...overrides,
   });
 });
 
@@ -203,30 +244,43 @@ Cypress.Commands.add("preencherIdentificacaoOuvidoria", (overrides = {}) => {
   cy.wrap(solicitacao, { log: false }).as("manifestacaoOuvidoria");
   cy.get(".step_identificacao").should("be.visible");
   const identificacaoLabel =
-    solicitacao.identificacao === "anonimo" ? "Anônimo" : solicitacao.identificacao;
+    solicitacao.identificacao === "anonimo"
+      ? "Anônimo"
+      : solicitacao.identificacao;
   cy.selectCustomOption("#identificacao", identificacaoLabel);
   if (solicitacao.identificacao === "anonimo") {
-    cy.get("#numero_identificacao").parents(".campo").should("have.class", "none");
+    cy.get("#numero_identificacao")
+      .parents(".campo")
+      .should("have.class", "none");
     return;
   }
-  if (solicitacao.identificacao === "Registro Profissional" || solicitacao.identificacao === "Outro") {
-    cy.get("#tipo_identificacao").should("be.visible").clear().type(
-      solicitacao.tipoDocumento || "Documento funcional"
-    );
+  if (
+    solicitacao.identificacao === "Registro Profissional" ||
+    solicitacao.identificacao === "Outro"
+  ) {
+    cy.get("#tipo_identificacao")
+      .should("be.visible")
+      .clear()
+      .type(solicitacao.tipoDocumento || "Documento funcional");
   } else {
-    cy.get("#tipo_identificacao").parents(".campo").should("have.class", "none");
+    cy.get("#tipo_identificacao")
+      .parents(".campo")
+      .should("have.class", "none");
   }
   cy.get("#numero_identificacao").clear().type(solicitacao.numeroIdentificacao);
 });
 
 // Avança até o cadastro do manifestante, ponto ideal para validar persistência de campos.
-Cypress.Commands.add("avancarParaCadastroManifestanteOuvidoria", (overrides = {}) => {
-  cy.iniciarSolicitacaoOuvidoria(overrides);
-  cy.preencherIdentificacaoOuvidoria(overrides);
-  cy.get("#buttons_next").click();
+Cypress.Commands.add(
+  "avancarParaCadastroManifestanteOuvidoria",
+  (overrides = {}) => {
+    cy.iniciarSolicitacaoOuvidoria(overrides);
+    cy.preencherIdentificacaoOuvidoria(overrides);
+    cy.get("#buttons_next").click();
 
-  cy.get(".step_cadastro_manifestante").should("be.visible");
-});
+    cy.get(".step_cadastro_manifestante").should("be.visible");
+  },
+);
 
 // Após a identificação, a Ouvidoria pode abrir cadastro novo ou o card de usuário já cadastrado.
 Cypress.Commands.add("avancarAposIdentificacaoOuvidoria", (overrides = {}) => {
@@ -237,7 +291,9 @@ Cypress.Commands.add("avancarAposIdentificacaoOuvidoria", (overrides = {}) => {
   cy.get("#buttons_next").click();
 
   if (solicitacao.identificacao === "anonimo") {
-    cy.get(".step_manifestacao_enviada", { timeout: 60000 }).should("be.visible");
+    cy.get(".step_manifestacao_enviada", { timeout: 60000 }).should(
+      "be.visible",
+    );
     return;
   }
 
@@ -245,7 +301,7 @@ Cypress.Commands.add("avancarAposIdentificacaoOuvidoria", (overrides = {}) => {
     cy.get(".step_usuario_cadastrado").should("be.visible");
     cy.get(".step_usuario_cadastrado_identificacao_nome").should(
       "contain",
-      solicitacao.nome.toUpperCase()
+      solicitacao.nome.toUpperCase(),
     );
     cy.get(".step_usuario_cadastrado_identificacao_documento")
       .invoke("text")
@@ -256,62 +312,71 @@ Cypress.Commands.add("avancarAposIdentificacaoOuvidoria", (overrides = {}) => {
 
   cy.get("body", { timeout: 20000 }).should(($body) => {
     expect(
-      $body.find(".step_cadastro_manifestante, .step_usuario_cadastrado").length,
-      "cadastro novo ou card de usuário existente"
+      $body.find(".step_cadastro_manifestante, .step_usuario_cadastrado")
+        .length,
+      "cadastro novo ou card de usuário existente",
     ).to.be.greaterThan(0);
   });
 });
 
 // Preenche o formulário completo quando o documento ainda não possui cadastro prévio.
-Cypress.Commands.add("preencherCadastroManifestanteOuvidoria", (overrides = {}) => {
-  const solicitacao = buildManifestacaoOuvidoria(overrides);
+Cypress.Commands.add(
+  "preencherCadastroManifestanteOuvidoria",
+  (overrides = {}) => {
+    const solicitacao = buildManifestacaoOuvidoria(overrides);
 
-  cy.get(".step_cadastro_manifestante").should("be.visible");
-  cy.get("#numero_identificacao").clear().type(solicitacao.numeroIdentificacao);
-  cy.get("#nome").clear().type(solicitacao.nome);
-  if (solicitacao.identificacao === "CNPJ") {
-    cy.get("#nome_representante").clear().type(solicitacao.nomeRepresentante);
-  }
-  cy.get("#email").clear().type(solicitacao.email);
-  cy.get("#telefone").clear().type(solicitacao.telefone);
-  cy.preencherCamposOpcionaisCadastroOuvidoria(solicitacao);
+    cy.get(".step_cadastro_manifestante").should("be.visible");
+    cy.get("#numero_identificacao")
+      .clear()
+      .type(solicitacao.numeroIdentificacao);
+    cy.get("#nome").clear().type(solicitacao.nome);
+    if (solicitacao.identificacao === "CNPJ") {
+      cy.get("#nome_representante").clear().type(solicitacao.nomeRepresentante);
+    }
+    cy.get("#email").clear().type(solicitacao.email);
+    cy.get("#telefone").clear().type(solicitacao.telefone);
+    cy.preencherCamposOpcionaisCadastroOuvidoria(solicitacao);
 
-  if (solicitacao.desejaNotificacaoEmail) {
-    cy.get("#assinatura_email").check({ force: true });
-  } else {
-    cy.get("#assinatura_email").uncheck({ force: true });
-  }
+    if (solicitacao.desejaNotificacaoEmail) {
+      cy.get("#assinatura_email").check({ force: true });
+    } else {
+      cy.get("#assinatura_email").uncheck({ force: true });
+    }
 
-  if (solicitacao.preservarIdentidade) {
-    cy.get("#reserva_identidade").check({ force: true });
-  } else {
-    cy.get("#reserva_identidade").uncheck({ force: true });
-  }
+    if (solicitacao.preservarIdentidade) {
+      cy.get("#reserva_identidade").check({ force: true });
+    } else {
+      cy.get("#reserva_identidade").uncheck({ force: true });
+    }
 
-  if (solicitacao.assumeResponsabilidade) {
-    cy.get("#assume_responsabilidade").check({ force: true });
-  } else {
-    cy.get("#assume_responsabilidade").uncheck({ force: true });
-  }
+    if (solicitacao.assumeResponsabilidade) {
+      cy.get("#assume_responsabilidade").check({ force: true });
+    } else {
+      cy.get("#assume_responsabilidade").uncheck({ force: true });
+    }
 
-  cy.get("#buttons_next").click();
-});
+    cy.get("#buttons_next").click();
+  },
+);
 
 // Quando o documento já existe, o fluxo mostra um card resumo e segue direto para notificação.
-Cypress.Commands.add("prosseguirUsuarioCadastradoOuvidoria", (overrides = {}) => {
-  const solicitacao = buildManifestacaoOuvidoria(overrides);
+Cypress.Commands.add(
+  "prosseguirUsuarioCadastradoOuvidoria",
+  (overrides = {}) => {
+    const solicitacao = buildManifestacaoOuvidoria(overrides);
 
-  cy.get(".step_usuario_cadastrado").should("be.visible");
-  cy.get(".step_usuario_cadastrado_identificacao_nome").should(
-    "contain",
-    solicitacao.nome.toUpperCase()
-  );
-  cy.get(".step_usuario_cadastrado_identificacao_documento")
-    .invoke("text")
-    .then((text) => text.replace(/\D/g, ""))
-    .should("contain", solicitacao.numeroIdentificacao.replace(/\D/g, ""));
-  cy.get("#buttons_next").click();
-});
+    cy.get(".step_usuario_cadastrado").should("be.visible");
+    cy.get(".step_usuario_cadastrado_identificacao_nome").should(
+      "contain",
+      solicitacao.nome.toUpperCase(),
+    );
+    cy.get(".step_usuario_cadastrado_identificacao_documento")
+      .invoke("text")
+      .then((text) => text.replace(/\D/g, ""))
+      .should("contain", solicitacao.numeroIdentificacao.replace(/\D/g, ""));
+    cy.get("#buttons_next").click();
+  },
+);
 
 // A última etapa editável confirma e-mail e telefone antes do envio definitivo.
 Cypress.Commands.add("preencherNotificacaoOuvidoria", (overrides = {}) => {
@@ -330,8 +395,13 @@ Cypress.Commands.add("criarManifestacaoOuvidoria", (overrides = {}) => {
   cy.avancarAposIdentificacaoOuvidoria(solicitacao);
 
   if (solicitacao.identificacao === "anonimo") {
-    cy.get(".step_manifestacao_enviada", { timeout: 60000 }).should("be.visible");
-    cy.contains(".step_manifestacao_enviada", "Sua manifestação foi enviada com sucesso.");
+    cy.get(".step_manifestacao_enviada", { timeout: 60000 }).should(
+      "be.visible",
+    );
+    cy.contains(
+      ".step_manifestacao_enviada",
+      "Sua manifestação foi enviada com sucesso.",
+    );
     cy.get(".copy_protocolo span")
       .invoke("text")
       .then((text) => text.replace(/\s+/g, " ").trim())
@@ -361,7 +431,10 @@ Cypress.Commands.add("criarManifestacaoOuvidoria", (overrides = {}) => {
   cy.preencherNotificacaoOuvidoria(solicitacao);
 
   cy.get(".step_manifestacao_enviada", { timeout: 20000 }).should("be.visible");
-  cy.contains(".step_manifestacao_enviada", "Sua manifestação foi enviada com sucesso.");
+  cy.contains(
+    ".step_manifestacao_enviada",
+    "Sua manifestação foi enviada com sucesso.",
+  );
   cy.get(".copy_protocolo span")
     .invoke("text")
     .then((text) => text.replace(/\s+/g, " ").trim())
@@ -376,39 +449,42 @@ Cypress.Commands.add("criarManifestacaoOuvidoria", (overrides = {}) => {
 Cypress.Commands.add("criarSolicitacaoOuvidoria", (overrides = {}) => {
   cy.criarManifestacaoOuvidoria({
     tipo: "solicitacaoservico",
-    ...overrides
+    ...overrides,
   });
 });
 
-Cypress.Commands.add("preencherCamposOpcionaisCadastroSic", (overrides = {}) => {
-  const solicitacao = buildSolicitacaoSic(overrides);
+Cypress.Commands.add(
+  "preencherCamposOpcionaisCadastroSic",
+  (overrides = {}) => {
+    const solicitacao = buildSolicitacaoSic(overrides);
 
-  if (!solicitacao.preencherCamposOpcionais) {
-    return;
-  }
+    if (!solicitacao.preencherCamposOpcionais) {
+      return;
+    }
 
-  cy.get("#data_nasc").clear().type(solicitacao.dataNascimento);
-  cy.get("body").click(0, 0, { force: true });
-  cy.get("#cep").clear().type(solicitacao.cep);
-  cy.get("#endereco").clear().type(solicitacao.endereco);
+    cy.get("#data_nasc").clear().type(solicitacao.dataNascimento);
+    cy.get("body").click(0, 0, { force: true });
+    cy.get("#cep").clear().type(solicitacao.cep);
+    cy.get("#endereco").clear().type(solicitacao.endereco);
 
-  cy.selectCustomRandomOption("#profissao");
-  cy.selectCustomRandomOption("#sexo");
-  cy.selectCustomRandomOption("#raca");
-  cy.selectCustomRandomOption("#escolaridade");
-  cy.selectCustomRandomOption("#estado_id");
+    cy.selectCustomRandomOption("#profissao");
+    cy.selectCustomRandomOption("#sexo");
+    cy.selectCustomRandomOption("#raca");
+    cy.selectCustomRandomOption("#escolaridade");
+    cy.selectCustomRandomOption("#estado_id");
 
-  cy.get("#cidade_id .selected").click({ force: true });
-  cy.get("#cidade_id .options .list a").should("have.length.greaterThan", 0);
-  cy.get("#cidade_id .options .list a").then(($options) => {
-    const randomIndex = Cypress._.random(0, $options.length - 1);
-    const $option = $options.eq(randomIndex);
-    const label = $option.text().trim();
+    cy.get("#cidade_id .selected").click({ force: true });
+    cy.get("#cidade_id .options .list a").should("have.length.greaterThan", 0);
+    cy.get("#cidade_id .options .list a").then(($options) => {
+      const randomIndex = Cypress._.random(0, $options.length - 1);
+      const $option = $options.eq(randomIndex);
+      const label = $option.text().trim();
 
-    cy.wrap($option).click({ force: true });
-    cy.get("#cidade_id .selected p").should("contain", label);
-  });
-});
+      cy.wrap($option).click({ force: true });
+      cy.get("#cidade_id .selected p").should("contain", label);
+    });
+  },
+);
 
 // A home pública correta do ambiente atual do SIC fica sob /cidadao/informacao/sic.
 Cypress.Commands.add("abrirHomeSic", () => {
@@ -422,7 +498,10 @@ Cypress.Commands.add("iniciarSolicitacaoSic", (overrides = {}) => {
   cy.wrap(solicitacao, { log: false }).as("solicitacaoSic");
 
   cy.abrirHomeSic();
-  cy.get("a[href*='sic_solicitar']").first().should("be.visible").click({ force: true });
+  cy.get("a[href*='sic_solicitar']")
+    .first()
+    .should("be.visible")
+    .click({ force: true });
 
   cy.get("#container_forms").should("be.visible");
   cy.get(".step_solicitacao").should("be.visible");
@@ -432,7 +511,7 @@ Cypress.Commands.add("iniciarSolicitacaoSic", (overrides = {}) => {
     cy.anexarArquivosUpload(
       ".step_solicitacao_anexo",
       solicitacao.anexos,
-      ".step_solicitacao_anexo_titulo"
+      ".step_solicitacao_anexo_titulo",
     );
   }
 
@@ -447,11 +526,18 @@ Cypress.Commands.add("preencherIdentificacaoSic", (overrides = {}) => {
   cy.get(".step_identificacao").should("be.visible");
   cy.selectCustomOption("#identificacao", solicitacao.identificacao);
 
-  if (solicitacao.identificacao === "Registro Profissional" || solicitacao.identificacao === "Outro") {
-    cy.get("#tipo_identificacao").parents(".campo").should("not.have.class", "none");
+  if (
+    solicitacao.identificacao === "Registro Profissional" ||
+    solicitacao.identificacao === "Outro"
+  ) {
+    cy.get("#tipo_identificacao")
+      .parents(".campo")
+      .should("not.have.class", "none");
     cy.get("#tipo_identificacao").clear().type(solicitacao.tipoDocumento);
   } else {
-    cy.get("#tipo_identificacao").parents(".campo").should("have.class", "none");
+    cy.get("#tipo_identificacao")
+      .parents(".campo")
+      .should("have.class", "none");
   }
 
   cy.get("#numero_identificacao").clear().type(solicitacao.numeroIdentificacao);
@@ -469,7 +555,7 @@ Cypress.Commands.add("avancarAposIdentificacaoSic", (overrides = {}) => {
     cy.get(".step_usuario_cadastrado").should("be.visible");
     cy.get(".step_usuario_cadastrado_identificacao_nome").should(
       "contain",
-      solicitacao.nome.toUpperCase()
+      solicitacao.nome.toUpperCase(),
     );
     cy.get(".step_usuario_cadastrado_identificacao_documento")
       .invoke("text")
@@ -481,7 +567,7 @@ Cypress.Commands.add("avancarAposIdentificacaoSic", (overrides = {}) => {
   cy.get("body", { timeout: 20000 }).should(($body) => {
     expect(
       $body.find(".step_cadastro_solicitante, .step_usuario_cadastrado").length,
-      "cadastro novo ou card de usuário existente"
+      "cadastro novo ou card de usuário existente",
     ).to.be.greaterThan(0);
   });
 });
@@ -526,7 +612,7 @@ Cypress.Commands.add("prosseguirUsuarioCadastradoSic", (overrides = {}) => {
   cy.get(".step_usuario_cadastrado").should("be.visible");
   cy.get(".step_usuario_cadastrado_identificacao_nome").should(
     "contain",
-    solicitacao.nome.toUpperCase()
+    solicitacao.nome.toUpperCase(),
   );
   cy.get(".step_usuario_cadastrado_identificacao_documento")
     .invoke("text")
@@ -569,7 +655,10 @@ Cypress.Commands.add("criarSolicitacaoSic", (overrides = {}) => {
   cy.preencherNotificacaoSic(solicitacao);
 
   cy.get(".step_solicitacao_enviada", { timeout: 20000 }).should("be.visible");
-  cy.contains(".step_solicitacao_enviada", "Sua solicitação foi enviada com sucesso.");
+  cy.contains(
+    ".step_solicitacao_enviada",
+    "Sua solicitação foi enviada com sucesso.",
+  );
   cy.get(".step_solicitacao_enviada_protocolo span")
     .invoke("text")
     .then((text) => text.replace(/\s+/g, " ").trim())

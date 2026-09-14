@@ -1,3 +1,15 @@
+/**
+ * Testes E2E dos filtros externos da listagem de Despesas no adaptador
+ * Megasoft: órgão, COVID-19, tipo, busca textual e período.
+ *
+ * Cada cenário prepara uma listagem limpa, interage com o controle externo e
+ * valida os registros, datas ou mensagens devolvidas pelo portal.
+ *
+ * Execução:
+ * npm run cy:run -- --spec "cypress/e2e/portal/transparencia/megasoft/sgdespesas/filtros-externos.cy.js"
+ */
+
+// Configuração da rota e identificação usadas nas mensagens do spec.
 const SG_DESPESAS_PATH = "/cidadao/transparencia/sgdespesas";
 const SG_DESPESAS_NOME = "sgdespesas";
 
@@ -626,6 +638,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtros externos`, () => {
     aguardarListagem();
   });
 
+  // Obtém o órgão real e valida o órgão do resultado filtrado.
   it("filtra por órgão e valida o campo no detalhe do resultado", () => {
     obterOrgaoDoPortal().then((orgaoDoPortal) => {
       selecionarOrgaoDoPortal(orgaoDoPortal).then((orgaoSelecionado) => {
@@ -635,30 +648,37 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtros externos`, () => {
     });
   });
 
+  // Valida registros ou a mensagem oficial para COVID-19 = Sim.
   it("filtra COVID-19 como Sim e verifica a listagem", () => {
     pesquisarCovidEValidarListagem("Sim");
   });
 
+  // Valida registros ou a mensagem oficial para COVID-19 = Não.
   it("filtra COVID-19 como Não e verifica a listagem", () => {
     pesquisarCovidEValidarListagem("Não");
   });
 
+  // Confere a opção Empenho e a listagem retornada.
   it("filtra por Tipo: Empenho e verifica a listagem", () => {
     pesquisarTipoEValidarListagem("Empenho");
   });
 
+  // Confere a opção Liquidação e a listagem retornada.
   it("filtra por Tipo: Liquidação e verifica a listagem", () => {
     pesquisarTipoEValidarListagem("Liquidação");
   });
 
+  // Confere a opção Pagamento e a listagem retornada.
   it("filtra por Tipo: Pagamento e verifica a listagem", () => {
     pesquisarTipoEValidarListagem("Pagamento");
   });
 
+  // Executa buscas textuais por movimento, favorecido e descrição.
   it("realiza busca textual por nome do movimento, favorecido e descrição", () => {
     pesquisarNomeMovimentoFavorecidoEDescricao();
   });
 
+  // Valida o intervalo dos sete dias anteriores até a data atual.
   it("filtra por últimos 7 dias no select de período", () => {
     const hoje = new Date();
     const seteDiasAtras = new Date(hoje);
@@ -672,6 +692,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtros externos`, () => {
     );
   });
 
+  // Valida os períodos anuais disponíveis para o ano atual e anterior.
   it("filtra por anos no select de período", () => {
     const anoAtual = new Date().getFullYear();
     const periodos = [
@@ -686,6 +707,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtros externos`, () => {
     });
   });
 
+  // Navega no calendário e valida os intervalos de mês selecionados.
   it("filtra por mês e ano no calendário de período", () => {
     const anoAtual = new Date().getFullYear();
     const anoAnterior = anoAtual - 1;
