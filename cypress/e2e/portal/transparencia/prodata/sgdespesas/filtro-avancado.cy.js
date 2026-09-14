@@ -1249,6 +1249,7 @@ function validarOrgaoNoDetalhe(orgaoSelecionado) {
     });
 }
 
+// Compara uma unidade do detalhe com a opção do select por código ou descrição.
 function unidadeCombinaComOpcao(nomeUnidade, nomeOpcao) {
   const unidadeEsperada = normalizarParaComparacao(nomeUnidade).replace(
     /^\d+\s*-\s*/,

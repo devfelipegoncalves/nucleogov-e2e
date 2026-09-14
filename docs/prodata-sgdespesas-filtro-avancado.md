@@ -74,6 +74,156 @@ a página até `MAX_TENTATIVAS_CARREGAMENTO_SELECT`.
 - `validarResultadoOuNenhumResultado`: aceita resultado válido ou a mensagem
   oficial de ausência de dados.
 
+## Funções do script
+
+As funções seguem o padrão **obter → selecionar → validar**. As funções
+`obter...` leem dados do portal, as `selecionar...` interagem com o filtro e as
+`validar...` conferem o resultado. Quando uma função retorna `cy...`, ela coloca
+uma nova etapa na fila do Cypress; por isso ela deve ser retornada quando o
+chamador precisa esperar seu resultado.
+
+### Normalização e comparação
+
+- `normalizarTexto(texto)`: remove espaços extras no início, no fim e entre
+  palavras. Retorna o texto limpo.
+- `normalizarParaComparacao(texto)`: além de limpar espaços, remove acentos e
+  converte para minúsculas. É usada somente para comparar textos.
+- `removerCodigo(texto)`: remove o código inicial de textos como `3 - Despesas
+Correntes`, deixando apenas a descrição.
+- `obterCodigoNumerico(texto)`: extrai e normaliza o código numérico inicial.
+- `opcaoCorrespondeAoCodigo(esperado, opcao)`: verifica se os códigos dos dois
+  textos são iguais ou representam uma relação pai/filho.
+- `obterIdentificacaoDaOpcao(elemento)`: reúne texto e atributos do link da
+  opção (`href`, `data-id` e `value`) para permitir comparação flexível.
+- `obterCodigoOrgao(texto)`: extrai o código numérico inicial de um órgão.
+- `valoresDoFiltroCorrespondem(esperado, opcao)`: compara descrição completa e
+  descrição sem código, aceitando uma conter a outra.
+- `obterTermosSignificativos(texto)`: separa palavras úteis e ignora artigos e
+  termos administrativos comuns.
+- `obterSiglaDoOrgao(nome)`: retorna a sigla conhecida ou monta uma sigla pelas
+  iniciais do nome.
+- `ehPrefeituraOuPoderExecutivo(nome)`: identifica as duas formas usadas pelo
+  portal para representar o Poder Executivo.
+- `obterIdentificadoresDoOrgao(nome)`: monta o conjunto de nomes e siglas
+  equivalentes de um órgão.
+- `orgaosCorrespondem(esperado, encontrado)`: compara órgão por nome, sigla,
+  código indireto ou termos significativos.
+
+### DOM, carregamento e selects
+
+- `obterCampoAvancadoPorRotulo(rotulo)`: encontra o container `.campo` pelo
+  texto do label e retorna um chainable Cypress.
+- `obterValorDoCampo(campo)`: lê o primeiro valor disponível entre `value`,
+  atributo `value` e texto do elemento.
+- `aguardarCampoComValor(campo)`: callback usado por `should` até o detalhe
+  preencher o campo.
+- `selecionarOpcao(container, texto)`: abre um select simples e clica no link
+  correspondente.
+- `obterContainerDoSelect(campo)`: transforma um seletor string em elemento
+  Cypress e relê o DOM atual.
+- `obterSeletorDoSelect(campo)`: obtém um seletor estável por ID para evitar
+  referências a elementos removidos pelo portal.
+- `visitarSgDespesas()`: intercepta e aguarda as duas chamadas iniciais antes
+  de continuar; a segunda carrega as opções dos filtros.
+- `recarregarPaginaEReabrirFiltro(campo, tentativa, continuar)`: recarrega o
+  portal quando a lista está vazia e chama novamente a operação interrompida.
+- `abrirSelectAvancadoComOpcoes(campo, recarregar, tentativa)`: abre o select,
+  coleta links visíveis e coordena a recuperação de lista vazia.
+- `pesquisarAutocomplete(campo, texto)`: digita no campo Buscar; o componente
+  do portal filtra localmente por `keyup`, portanto não há request por termo.
+- `obterOpcoesDoFiltro(campo, termo, tentativa)`: tenta termos alternativos,
+  coleta opções visíveis e solicita recarga quando necessário.
+- `obterOpcaoDoFiltro(campo, termos, corresponde, tentativa)`: encontra uma
+  opção usando uma função de comparação fornecida pelo cenário.
+- `aguardarListagem()`: espera loaders desaparecerem e a tabela aparecer.
+- `obterLinhasValidas()`: retorna linhas que não são templates nem a linha de
+  “nenhum resultado”.
+- `validarResultadoOuNenhumResultado(nome, validar)`: executa a validação ou
+  aceita a mensagem oficial de lista vazia.
+- `prepararListagemComFavorecido()`: troca o período quando necessário até
+  encontrar uma linha com favorecido preenchido.
+- `abrirFiltroAvancado(campo)`: abre o popup somente se o campo pedido ainda
+  não estiver visível.
+- `limparFiltrosAntesDoTeste()`: remove filtros persistidos pelo portal.
+- `fecharTermosDeUsoSeExibido()`: fecha o aviso de cookies quando ele cobre o
+  conteúdo do detalhe.
+- `selecionarCovidAvancado(opcao)`: abre o select booleano, localiza Sim ou Não
+  e clica na opção.
+
+### Leitura e validação dos campos do empenho
+
+- `obterHistoricoDoPrimeiroRegistro()` / `validarHistoricoNoDetalhe()`: leem e
+  conferem a descrição do empenho.
+- `obterFavorecidoDoPrimeiroRegistro()` / `validarFavorecidoNoDetalhe()`: leem
+  e conferem o favorecido.
+- `obterCpfCnpjDeUmRegistro(indice)` / `validarCpfCnpjNoDetalhe()`: procuram um
+  documento com 11 ou 14 dígitos e conferem seus dígitos.
+- `obterNumeroDoPrimeiroRegistro()` / `validarNumeroNoDetalhe()`: obtêm o
+  número do empenho e conferem o mesmo número no detalhe filtrado.
+- `obterOrgaoDoPrimeiroRegistro()` / `selecionarOrgao()` /
+  `validarOrgaoNoDetalhe()`: obtêm, selecionam e validam o órgão.
+- `obterUnidadesDisponiveisNoFiltro()` / `obterUnidadeDoRegistroPesquisavel()`
+  / `selecionarUnidade()` / `validarUnidadeNoDetalhe()`: encontram uma unidade
+  realmente disponível e validam seu retorno.
+- `unidadeCombinaComOpcao(unidade, opcao)`: compara uma unidade do detalhe com
+  cada opção disponível por código ou descrição.
+- `obterFuncaoDoPrimeiroRegistro()` / `selecionarFuncao()` /
+  `validarFuncaoNoDetalhe()`: tratam o filtro de função.
+- `obterSubfuncaoDoPrimeiroRegistro()` / `selecionarSubfuncao()` /
+  `validarSubfuncaoNoDetalhe()`: tratam o filtro de subfunção.
+- `obterGrupoDoPrimeiroRegistro()` / `selecionarGrupo()` /
+  `validarGrupoNoDetalhe()`: tratam o grupo orçamentário.
+- `obterModalidadeAplicacaoDoPrimeiroRegistro()` /
+  `selecionarModalidadeAplicacao()` /
+  `validarModalidadeAplicacaoNoDetalhe()`: tratam a modalidade.
+- `obterNaturezaDoPrimeiroRegistro()` / `selecionarNatureza()` /
+  `validarNaturezaNoDetalhe()`: tratam a natureza da despesa.
+- `obterElementoDoPrimeiroRegistro()` / `selecionarElementoDaDespesa()` /
+  `validarElementoNoDetalhe()`: tratam o elemento e retornam alerta quando a
+  opção não é fornecida pelo portal.
+- `obterCategoriaEconomicaDoPrimeiroRegistro()` /
+  `selecionarCategoriaEconomica()` /
+  `validarCategoriaEconomicaNoDetalhe()`: tratam a categoria econômica.
+
+### Valores, datas, ações, programas e fontes
+
+- `converterValorMonetario(valor)`: converte formatos brasileiros e retorna um
+  número para comparação.
+- `formatarValorMonetario(valor)`: converte um número para texto monetário
+  aceito pelo campo do formulário.
+- `obterTextoDoValorNaLinha(linha, tipo)`: localiza a coluna monetária por
+  seletor ou cabeçalho.
+- `obterTextoDoValorEmpenhadoNaLinha()` / `obterTextoDoValorLiquidadoNaLinha()`
+  / `obterTextoDoValorPagoNaLinha()`: especializam a leitura de cada valor.
+- `obterValoresMonetariosDaListagem(obterTexto, descricao)`: coleta mínimo,
+  máximo e valores numéricos das linhas.
+- `obterValoresEmpenhadosDaListagem()` / `obterValoresLiquidadosDaListagem()` /
+  `obterValoresPagosDaListagem()`: aplicam a coleta ao tipo correspondente.
+- `preencherValorAvancado(rotulo, valor)`: encontra o campo monetário pelo
+  label e preenche o valor formatado.
+- `validarValoresMonetariosNaListagem(limite, tipo, obterTexto, descricao)`:
+  confere que as linhas respeitam o limite aplicado.
+- `validarValoresEmpenhadosNaListagem()` /
+  `validarValoresLiquidadosNaListagem()` /
+  `validarValoresPagosNaListagem()`: especializam a validação monetária.
+- `converterData(data)`: converte data brasileira para número comparável.
+- `obterDatasInicialEFinalDaListagem()`: extrai o menor e o maior dia da tabela.
+- `validarDatasNoPeriodo(inicial, final)`: garante que as datas retornadas
+  estejam dentro do intervalo informado.
+- `extrairNumeroDoDetalhamento(texto)` / `obterNumeroDoDetalhamentoAtual()`:
+  extraem o identificador numérico exibido no detalhe.
+- `obterDadosDaAcaoDoPrimeiroRegistro()` / `obterDadosDaAcaoNoResultado()`:
+  leem ação e número do empenho para validar o filtro.
+- `selecionarAcoes(nome, indice, tentativa)` / `selecionarAcaoComResultado()`:
+  selecionam ação com recuperação para listas dependentes.
+- `registrarAlertaPrograma(mensagem, detalhes)`: registra ausência de programa
+  sem esconder a informação no relatório.
+- `obterProgramaDoEmpenho(indice)` / `pesquisarProgramaAteEncontrarResultado()`
+  / `tentarOpcoesDePrograma()`: encontram e pesquisam programa com tentativas.
+- `validarProgramaNoDetalhe(nome)`: confere o programa do resultado.
+- `obterFonteDoEmpenho()` / `selecionarFonte()` / `validarFonteNoDetalhe()` /
+  `validarFonteNaListagem()`: obtêm, selecionam e validam a fonte.
+
 ## Manutenção
 
 Prefira dados extraídos do portal a valores fixos. Ao adicionar um cenário,

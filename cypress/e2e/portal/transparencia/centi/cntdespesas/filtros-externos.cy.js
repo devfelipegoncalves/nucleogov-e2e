@@ -25,6 +25,13 @@ const SELETOR_ACIONAR_BUSCA = ".filtro .busca_texto .icon-lupa";
 const SELETOR_SELECT_PERIODO = "#filtro_periodo .select > .selected";
 const SELETOR_OPCOES_PERIODO = "#filtro_periodo .select > .options";
 
+/*
+ * Este arquivo valida os filtros visíveis diretamente na listagem Centi.
+ * Funções "obter" leem valores de referência, "selecionar" interagem com os
+ * controles, "aguardar" sincronizam o DOM e "validar" conferem o resultado.
+ */
+
+// Normalização de texto e comparação de órgãos.
 function normalizarTexto(texto = "") {
   return texto.replace(/\s+/g, " ").trim();
 }
@@ -96,6 +103,7 @@ function orgaosCorrespondem(orgaoEsperado, orgaoEncontrado) {
   return termosEsperados.some((termo) => termosEncontrados.includes(termo));
 }
 
+// Funções de leitura da tabela, busca textual e período.
 function obterLinhasValidas() {
   return cy
     .get(SELETOR_LINHAS_VALIDAS, { timeout: 30000 })
@@ -576,6 +584,7 @@ function validarResultadoCovid(opcaoCovid) {
     });
 }
 
+// Cenários dos filtros externos do adaptador Centi.
 describe(`Portal: ${DESPESAS_NOME} - filtros externos`, () => {
   beforeEach(() => {
     cy.visitPortal(DESPESAS_PATH);

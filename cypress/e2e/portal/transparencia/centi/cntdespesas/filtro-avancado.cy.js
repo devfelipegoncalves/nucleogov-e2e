@@ -17,6 +17,16 @@ const DESPESAS_NOME = Cypress.env("DESPESAS_NOME") || "cntdespesas";
 const SELETOR_LINHAS_VALIDAS = ".cont_dados .tb tr[id]";
 const SELETOR_POPUP_DETALHES = "#pop_detalhes";
 
+/*
+ * Convenções usadas no arquivo:
+ * - obter... lê dados reais do registro ou do detalhe;
+ * - preencher... escreve valores nos campos textuais;
+ * - selecionar... escolhe opções nos selects do Centi;
+ * - validar... confere o retorno após a pesquisa;
+ * - aguardar... impede que o Cypress leia o DOM antes do portal terminar.
+ */
+
+// Normalização de textos, documentos, códigos e equivalência entre valores.
 function normalizarTexto(texto = "") {
   return texto.replace(/\s+/g, " ").trim();
 }
@@ -124,6 +134,7 @@ function orgaosCorrespondem(orgaoEsperado, orgaoEncontrado) {
   return termosEsperados.some((termo) => termosEncontrados.includes(termo));
 }
 
+// Funções básicas de navegação, leitura de detalhes e sincronização da tabela.
 function obterLinhasValidas() {
   return cy
     .get(SELETOR_LINHAS_VALIDAS, { timeout: 30000 })
@@ -753,6 +764,7 @@ function obterCategoriaEconomicaDoRegistro() {
     });
 }
 
+// Funções que abrem o popup e preenchem ou selecionam cada tipo de filtro.
 function abrirFiltroAvancado() {
   cy.get("#busca-a", { timeout: 30000 })
     .should("be.visible")
@@ -1685,6 +1697,7 @@ function pesquisarFiltroAvancadoComOuSemResultado() {
   aguardarListagemComOuSemResultado();
 }
 
+// Funções de validação dos valores que retornam na listagem ou no detalhe.
 function validarCredorNoResultado(credorEsperado) {
   obterLinhasValidas().then((linhas) => {
     expect(
@@ -2198,6 +2211,7 @@ function validarCategoriaEconomicaNoResultado(categoriaEsperada) {
     .then(() => fecharDetalhe());
 }
 
+// Cenários do adaptador Centi.
 describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
   beforeEach(() => {
     cy.visitPortal(DESPESAS_PATH);

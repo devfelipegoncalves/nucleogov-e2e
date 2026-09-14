@@ -15,6 +15,17 @@ const SG_DESPESAS_PATH = "/cidadao/transparencia/sgdespesas";
 const SG_DESPESAS_NOME = "sgdespesas";
 const LISTAGEM_TIMEOUT = 60000;
 
+/*
+ * Convenção de leitura deste arquivo:
+ * - obter... busca um dado real na listagem ou no detalhe;
+ * - selecionar... interage com um campo do filtro avançado;
+ * - validar... confirma o valor retornado;
+ * - aguardar... sincroniza o Cypress com loaders e elementos dinâmicos.
+ * Os comentários da documentação em docs explicam parâmetros e retornos por
+ * grupo, enquanto os comentários dos testes explicam o cenário executado.
+ */
+
+// Funções de normalização e comparação de textos, códigos e órgãos.
 function normalizarTexto(texto = "") {
   return texto.replace(/\s+/g, " ").trim();
 }
@@ -186,6 +197,7 @@ function orgaosCorrespondem(nomeEsperado, nomeEncontrado) {
   return termosEsperados.some((termo) => termosEncontrados.includes(termo));
 }
 
+// Funções que localizam, abrem e preparam os controles do popup.
 function selecionarOpcao(containerSelector, textoOpcao) {
   cy.get(containerSelector).find(".selected").click({ force: true });
   cy.contains(`${containerSelector} .options .list a`, textoOpcao, {
@@ -632,6 +644,7 @@ function validarNumeroNaListagem(numeroBuscado) {
   });
 }
 
+// Funções de leitura, conversão e validação de valores monetários e datas.
 function converterValorMonetario(valor) {
   const valorSemEspacos = normalizarTexto(valor).replace(/\s/g, "");
   const valorNumerico = valorSemEspacos.replace(/[^\d,.-]/g, "");
@@ -897,6 +910,7 @@ function validarDatasNoPeriodo(dataInicial, dataFinal) {
   });
 }
 
+// Funções específicas das classificações orçamentárias e funcionais.
 function obterOrgaoDoPrimeiroRegistro() {
   cy.get(
     '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
@@ -954,6 +968,7 @@ function validarOrgaoNoDetalhe(nomeOrgao) {
     });
 }
 
+// Compara uma unidade do detalhe com a opção do select por código ou descrição.
 function unidadeCombinaComOpcao(nomeUnidade, nomeOpcao) {
   const unidadeEsperada = normalizarParaComparacao(nomeUnidade).replace(
     /^\d+\s*-\s*/,
@@ -2041,6 +2056,7 @@ function validarCategoriaEconomicaNoDetalhe(nomeCategoria) {
     });
 }
 
+// Cenários do adaptador Megasoft.
 describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
   beforeEach(() => {
     cy.visitPortal(SG_DESPESAS_PATH);

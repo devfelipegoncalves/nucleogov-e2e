@@ -13,6 +13,13 @@
 const SG_DESPESAS_PATH = "/cidadao/transparencia/sgdespesas";
 const SG_DESPESAS_NOME = "sgdespesas";
 
+/*
+ * Este script trabalha com os controles que ficam na listagem, fora do popup.
+ * Funções "obter" capturam dados reais, "selecionar" aplicam filtros,
+ * "pesquisar" executam consultas e "validar" conferem o retorno.
+ */
+
+// Funções de normalização e equivalência de órgãos.
 function normalizarTexto(texto = "") {
   return texto.replace(/\s+/g, " ").trim();
 }
@@ -53,6 +60,7 @@ function removerCodigoOrgao(texto) {
   return normalizarParaComparacao(texto).replace(/^[\d.]+\s*[-.)]\s*/, "");
 }
 
+// Trata Prefeitura e Poder Executivo como nomes equivalentes do mesmo órgão.
 function ehPrefeituraOuPoderExecutivo(nomeOrgao) {
   return /\bprefeitura\b|\bpoder executivo\b/.test(
     removerCodigoOrgao(nomeOrgao),
@@ -138,6 +146,7 @@ function orgaosCorrespondem(nomeEsperado, nomeEncontrado) {
   return termosEsperados.some((termo) => termosEncontrados.includes(termo));
 }
 
+// Funções de sincronização, seleção e validação dos filtros de período.
 function aguardarListagem() {
   cy.get(".loader", { timeout: 30000 }).should("not.exist");
   cy.get(".cont_dados", { timeout: 30000 }).should("be.visible");
@@ -332,6 +341,7 @@ function validarOrgaoNoDetalhe(orgaoSelecionado) {
     });
 }
 
+// Funções de validação dos filtros COVID-19, Tipo e busca textual.
 // Executa a mesma sequência para Sim e Não. Sim deve retornar empenhos; para
 // Não, o portal pode retornar empenhos ou a mensagem oficial de lista vazia.
 function pesquisarCovidEValidarListagem(opcao) {
