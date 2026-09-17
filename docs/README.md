@@ -9,16 +9,24 @@ lista de cenários.
 
 - [Filtro avançado](prodata-sgdespesas-filtro-avancado.md)
 - [Filtros externos](prodata-sgdespesas-filtros-externos.md)
+- [Exportações de arquivos](prodata-sgdespesas-exportacoes.md)
 
 ## Megasoft — SGDespesas
 
 - [Filtro avançado](megasoft-sgdespesas-filtro-avancado.md)
 - [Filtros externos](megasoft-sgdespesas-filtros-externos.md)
+- [Exportações de arquivos](megasoft-sgdespesas-exportacoes.md)
+
+## MegaSoft — MGDespesas
+
+- [Filtros e exportações](megasoft-mgdespesas.md)
+- [Exportações de arquivos](megasoft-mgdespesas-exportacoes.md)
 
 ## Centi — CNTDespesas
 
 - [Filtro avançado](centi-cntdespesas-filtro-avancado.md)
 - [Filtros externos](centi-cntdespesas-filtros-externos.md)
+- [Exportações de arquivos](centi-cntdespesas-exportacoes.md)
 
 ## Convenção
 

@@ -7,7 +7,8 @@ Esta documentação descreve os testes Cypress do módulo público de despesas d
 ```text
 cypress/e2e/portal/transparencia/megasoft/mgdespesas/
 ├── filtros-externos.cy.js
-└── filtro-avancado.cy.js
+├── filtro-avancado.cy.js
+└── exportacoes.cy.js
 ```
 
 Os testes usam a rota padrão:
@@ -67,6 +68,10 @@ São cobertos:
 ### Regra especial do Programa
 
 O programa é obtido no detalhamento e pesquisado no autocomplete do filtro. O teste conta as opções compatíveis, seleciona a primeira e executa a consulta. Quando não há linhas válidas, limpa e repete a pesquisa, selecionando a próxima opção até encontrar registros. A validação final acessa o detalhamento do primeiro resultado e compara o programa retornado com o programa pesquisado.
+
+## Exportações
+
+O fluxo de exportação está documentado em [Exportações de arquivos](megasoft-mgdespesas-exportacoes.md). Ele cria um cenário independente para cada formato disponibilizado pelo portal e compara os dados exportados com todos os campos do detalhamento de uma despesa real.
 
 ## Como executar
 

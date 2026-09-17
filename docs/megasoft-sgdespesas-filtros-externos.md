@@ -62,3 +62,7 @@ oficial de ausência de resultados.
   `pesquisarTextoEValidarCampo` e
   `pesquisarNomeMovimentoFavorecidoEDescricao`: preparam, executam e validam
   as buscas textuais.
+
+## Exportações
+
+O fluxo de exportação está documentado em [Exportações de arquivos](megasoft-sgdespesas-exportacoes.md). O spec de SG reutiliza o fluxo comum de MGDespesas com a rota `/cidadao/transparencia/sgdespesas`.
