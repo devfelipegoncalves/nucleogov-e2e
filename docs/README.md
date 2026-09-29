@@ -28,6 +28,11 @@ lista de cenários.
 - [Filtros externos](centi-cntdespesas-filtros-externos.md)
 - [Exportações de arquivos](centi-cntdespesas-exportacoes.md)
 
+## Fiorilli — Despesas FRL
+
+- [Filtro avançado](fiorilli-despesasfrl-filtro-avancado.md)
+- [Exportações de arquivos](fiorilli-despesasfrl-exportacoes.md)
+
 ## Convenção
 
 Cada documento identifica o script correspondente, apresenta o comando para

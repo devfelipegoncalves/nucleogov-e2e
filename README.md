@@ -11,6 +11,7 @@ O projeto automatiza os principais fluxos públicos e administrativos da platafo
 - Autenticação e fluxos administrativos
 - Testes de fumaça do portal
 - Consultas de transparência MegaSoft — SG Despesas e MG Despesas
+- Consultas de transparência Fiorilli — Despesas FRL
 - Upload de documentos e anexos
 - Validações de identificação, cadastro e envio de solicitações
 
@@ -120,6 +121,8 @@ Os helpers concentram a geração de massa e as regras comuns, enquanto as espec
 - [Testes do SIC](docs/sic-cypress.md)
 - [Cobertura de documentação e anexos](docs/cobertura-documentacao-anexos.md)
 - [Testes MegaSoft — MG Despesas](docs/megasoft-mgdespesas.md)
+- [Fiorilli — filtro avançado de Despesas FRL](docs/fiorilli-despesasfrl-filtro-avancado.md)
+- [Fiorilli — exportações de Despesas FRL](docs/fiorilli-despesasfrl-exportacoes.md)
 
 ## Licença
 
