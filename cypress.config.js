@@ -33,11 +33,60 @@ module.exports = defineConfig({
 
           return null;
         },
+        readDownloadedFile({ fileNames = [] }) {
+          const nomesDeArquivo = fileNames.filter((fileName) => {
+            if (!fileName || path.basename(fileName) !== fileName) {
+              throw new Error(`Nome de download inválido: ${fileName}`);
+            }
+
+            return true;
+          });
+          const deadline = Date.now() + 30000;
+
+          return new Promise((resolve, reject) => {
+            function lerArquivo() {
+              const nomeArquivoEncontrado = nomesDeArquivo.find((nome) =>
+                fs.existsSync(path.join(config.downloadsFolder, nome)),
+              );
+
+              if (nomeArquivoEncontrado) {
+                const filePath = path.join(
+                  config.downloadsFolder,
+                  nomeArquivoEncontrado,
+                );
+                const tamanho = fs.statSync(filePath).size;
+
+                if (tamanho > 0) {
+                  resolve({
+                    fileName: nomeArquivoEncontrado,
+                    tamanho,
+                    content: fs.readFileSync(filePath, "utf8"),
+                  });
+                  return;
+                }
+              }
+
+              if (Date.now() >= deadline) {
+                reject(
+                  new Error(
+                    `Arquivo não baixado: ${nomesDeArquivo.join(" ou ")}`,
+                  ),
+                );
+                return;
+              }
+
+              setTimeout(lerArquivo, 100);
+            }
+
+            lerArquivo();
+          });
+        },
         assertDownloadedFileContains({
           fileName,
           fileNames = [],
           expectedFields = [],
           adaptador = "padrao",
+          reportarCamposAusentes = false,
         }) {
           const nomesDeArquivo = [fileName, ...fileNames].filter(Boolean);
           const deadline = Date.now() + 30000;
@@ -123,8 +172,9 @@ module.exports = defineConfig({
                         esperado,
                         ehDocumento,
                         ehCampoMonetario:
-                          ["centi", "prodata"].includes(adaptador) &&
-                          ehCampoMonetario(label),
+                          ["centi", "prodata", "fiorilli"].includes(
+                            adaptador,
+                          ) && ehCampoMonetario(label),
                       };
                     })
                     .filter(({ esperado }) => esperado);
@@ -155,22 +205,25 @@ module.exports = defineConfig({
                     })
                     .map(({ label }) => label);
 
-                  if (camposAusentes.length === 0) {
+                  const camposComparados = camposParaComparar.map(
+                    ({ label, value, ehDocumento, ehCampoMonetario }) => ({
+                      label,
+                      value,
+                      regra: ehDocumento
+                        ? "documento com máscara normalizada"
+                        : ehCampoMonetario
+                          ? `valor ${adaptador} com pontuação monetária normalizada`
+                          : "texto com acentuação e espaços normalizados",
+                      encontrado: !camposAusentes.includes(label),
+                    }),
+                  );
+
+                  if (camposAusentes.length === 0 || reportarCamposAusentes) {
                     resolve({
                       tamanho,
                       fileName: nomeArquivoEncontrado,
-                      camposComparados: camposParaComparar.map(
-                        ({ label, value, ehDocumento, ehCampoMonetario }) => ({
-                          label,
-                          value,
-                          regra: ehDocumento
-                            ? "documento com máscara normalizada"
-                            : ehCampoMonetario
-                              ? `valor ${adaptador} com pontuação monetária normalizada`
-                              : "texto com acentuação e espaços normalizados",
-                          encontrado: true,
-                        }),
-                      ),
+                      camposComparados,
+                      camposAusentes,
                     });
                     return;
                   }
