@@ -6,15 +6,24 @@
  * o detalhamento do primeiro resultado após cada seleção.
  */
 
+// Caminho da página testada. O valor pode ser sobrescrito com `--env` para
+// reutilizar o mesmo spec em outro município que use o adaptador Centi.
 const RECEITAS_PATH =
   Cypress.env("RECEITAS_PATH") || "/cidadao/transparencia/cntreceitas";
+// Nome usado nos títulos e nos logs do Cypress.
 const RECEITAS_NOME = Cypress.env("RECEITAS_NOME") || "cntreceitas";
+// Prazo máximo para carregamentos do portal e respostas assíncronas.
 const LISTAGEM_TIMEOUT = 30000;
+// A tabela é criada pelo JavaScript do portal depois que a página é aberta.
 const SELETOR_LINHAS = ".cont_dados .tb tr[id]";
+// O componente Centi monta o select de órgão dentro de `.conteinerorgao`.
 const SELETOR_SELECT_ORGAO = ".conteinerorgao > .select > .selected";
 const SELETOR_OPCOES_ORGAO = ".conteinerorgao > .select > .options";
+// Campo de busca textual da listagem, separado do campo de busca dos selects.
 const SELETOR_BUSCA_TEXTO = ".filtro .containerbusca.busca_texto #search";
+// O CNTReceitas usa somente o calendário mensal para o filtro de período.
 const SELETOR_CALENDARIO = "#filtro_periodo .filtro_intervalo";
+// Nomes usados para converter o texto do detalhamento em número de mês.
 const MESES = [
   "janeiro",
   "fevereiro",
@@ -30,10 +39,12 @@ const MESES = [
   "dezembro",
 ];
 
+// Remove espaços duplicados e quebras de linha antes das comparações.
 function normalizarTexto(texto = "") {
   return String(texto).replace(/\s+/g, " ").trim();
 }
 
+// Normaliza acentos e caixa para comparar textos sem depender da apresentação.
 function normalizarParaComparacao(texto = "") {
   return normalizarTexto(texto)
     .normalize("NFD")
@@ -41,6 +52,7 @@ function normalizarParaComparacao(texto = "") {
     .toLowerCase();
 }
 
+// Converte "Outubro" ou "10" para o número do mês usado pelo calendário.
 function obterNumeroMes(texto) {
   const valor = normalizarParaComparacao(texto);
   const indice = MESES.findIndex((mes) => valor.includes(mes));
@@ -50,10 +62,12 @@ function obterNumeroMes(texto) {
   return numero;
 }
 
+// Remove códigos como "01 -" do início do nome de um órgão.
 function removerCodigo(texto = "") {
   return normalizarParaComparacao(texto).replace(/^\d+[\s.]*[-.)]\s*/, "");
 }
 
+// Separa palavras úteis, ignorando termos genéricos de órgãos públicos.
 function obterTermosSignificativos(texto) {
   const termosIgnorados = new Set([
     "a",
@@ -79,6 +93,7 @@ function obterTermosSignificativos(texto) {
     .filter((termo) => termo.length > 2 && !termosIgnorados.has(termo));
 }
 
+// Aceita diferenças de código, prefixo e nomenclatura entre filtro e detalhe.
 function orgaosCorrespondem(orgaoEsperado, orgaoEncontrado) {
   const esperado = removerCodigo(orgaoEsperado);
   const encontrado = removerCodigo(orgaoEncontrado);
@@ -105,6 +120,7 @@ function orgaosCorrespondem(orgaoEsperado, orgaoEncontrado) {
   return termosEsperados.some((termo) => termosEncontrados.includes(termo));
 }
 
+// Retorna somente linhas reais, descartando template, carregamento e vazio.
 function obterLinhasValidas() {
   return cy
     .get(SELETOR_LINHAS, { timeout: LISTAGEM_TIMEOUT })
@@ -116,6 +132,7 @@ function obterLinhasValidas() {
     );
 }
 
+// Sincroniza o teste com o fim do carregamento inicial ou de um filtro.
 function aguardarListagem() {
   cy.get(".loader", { timeout: LISTAGEM_TIMEOUT }).should("not.exist");
   cy.get(".cont_dados", { timeout: LISTAGEM_TIMEOUT }).should("be.visible");
@@ -124,6 +141,7 @@ function aguardarListagem() {
   return obterLinhasValidas().should("have.length.at.least", 1);
 }
 
+// Lê valores de input, textarea ou elementos que exibem texto no detalhe.
 function obterValorDoCampo($campo) {
   const campo = $campo.first();
   return normalizarTexto(
@@ -131,6 +149,7 @@ function obterValorDoCampo($campo) {
   );
 }
 
+// Abre o detalhamento da primeira receita disponível na tabela.
 function abrirPrimeiroRegistro() {
   return obterLinhasValidas()
     .first()
@@ -140,6 +159,7 @@ function abrirPrimeiroRegistro() {
     .click({ force: true });
 }
 
+// Fecha o popup para que o próximo filtro seja aplicado na listagem.
 function fecharDetalhamento() {
   cy.get("#popmov #close", { timeout: LISTAGEM_TIMEOUT }).click({
     force: true,
@@ -147,6 +167,7 @@ function fecharDetalhamento() {
   cy.get("#popmov").should("not.exist");
 }
 
+// Obtém o órgão exibido no popup da receita atualmente aberta.
 function obterOrgaoDoDetalhamento() {
   return cy
     .get("#popmov", { timeout: LISTAGEM_TIMEOUT })
@@ -161,6 +182,7 @@ function obterOrgaoDoDetalhamento() {
     });
 }
 
+// Encapsula abrir, ler e fechar o primeiro registro.
 function obterOrgaoDoPrimeiroRegistro() {
   abrirPrimeiroRegistro();
 
@@ -170,6 +192,7 @@ function obterOrgaoDoPrimeiroRegistro() {
   });
 }
 
+// Abre o select, pesquisa o órgão coletado e aplica a opção correspondente.
 function selecionarOrgaoCorrespondente(orgaoEsperado) {
   cy.get(SELETOR_SELECT_ORGAO, { timeout: LISTAGEM_TIMEOUT })
     .should("be.visible")
@@ -202,6 +225,7 @@ function selecionarOrgaoCorrespondente(orgaoEsperado) {
     });
 }
 
+// Escolhe uma opção diferente para provar que o filtro muda de fato o retorno.
 function selecionarOutroOrgao(orgaoAtual) {
   cy.get(SELETOR_SELECT_ORGAO, { timeout: LISTAGEM_TIMEOUT })
     .should("be.visible")
@@ -230,6 +254,7 @@ function selecionarOutroOrgao(orgaoAtual) {
     });
 }
 
+// Confere se o primeiro resultado após o filtro pertence ao órgão solicitado.
 function validarOrgaoDosResultados(orgaoEsperado) {
   return aguardarListagem()
     .then(() => abrirPrimeiroRegistro())
@@ -247,6 +272,7 @@ function validarOrgaoDosResultados(orgaoEsperado) {
     });
 }
 
+// Captura os dois campos usados nos testes de busca textual.
 function obterNaturezaEDescricaoDaPrimeiraReceita() {
   return obterLinhasValidas()
     .first()
@@ -270,6 +296,7 @@ function obterNaturezaEDescricaoDaPrimeiraReceita() {
     });
 }
 
+// Pesquisa um termo e garante que ele aparece na coluna esperada dos resultados.
 function pesquisarTextoEValidar(termo, seletorColuna, nomeDoCampo) {
   cy.get(SELETOR_BUSCA_TEXTO, { timeout: LISTAGEM_TIMEOUT })
     .should("be.visible")
@@ -296,6 +323,7 @@ function pesquisarTextoEValidar(termo, seletorColuna, nomeDoCampo) {
   });
 }
 
+// Lê mês e ano do primeiro detalhe para formar o primeiro filtro de período.
 function obterPeriodoDoPrimeiroRegistro() {
   abrirPrimeiroRegistro();
 
@@ -312,6 +340,7 @@ function obterPeriodoDoPrimeiroRegistro() {
     });
 }
 
+// Navega no calendário até o ano indicado e seleciona o mês informado.
 function selecionarMesEAno(periodo) {
   cy.get(SELETOR_CALENDARIO, { timeout: LISTAGEM_TIMEOUT })
     .should("be.visible")
@@ -351,6 +380,7 @@ function selecionarMesEAno(periodo) {
     });
 }
 
+// Abre o primeiro resultado e compara mês e ano com o período solicitado.
 function validarPeriodoDosResultados(periodo, descricao) {
   return aguardarListagem()
     .then(() => abrirPrimeiroRegistro())
@@ -379,6 +409,7 @@ function validarPeriodoDosResultados(periodo, descricao) {
     });
 }
 
+// Cada cenário começa em uma página limpa para não herdar filtros anteriores.
 describe(`Portal: ${RECEITAS_NOME} - filtros externos`, () => {
   beforeEach(() => {
     cy.visitPortal(RECEITAS_PATH);
@@ -386,6 +417,7 @@ describe(`Portal: ${RECEITAS_NOME} - filtros externos`, () => {
     aguardarListagem();
   });
 
+  // Confere o órgão original e depois prova que uma segunda opção também filtra.
   it("filtra pelo órgão do registro e depois por outro órgão", () => {
     obterOrgaoDoPrimeiroRegistro()
       .then((orgaoEncontrado) => selecionarOrgaoCorrespondente(orgaoEncontrado))
@@ -398,6 +430,7 @@ describe(`Portal: ${RECEITAS_NOME} - filtros externos`, () => {
       .then((outroOrgao) => validarOrgaoDosResultados(outroOrgao));
   });
 
+  // Usa os valores reais da primeira linha para testar os dois campos textuais.
   it("busca pela natureza e pela descrição da primeira receita", () => {
     obterNaturezaEDescricaoDaPrimeiraReceita().then(({ natureza, descricao }) =>
       pesquisarTextoEValidar(natureza, ".colModalidade", "natureza")
@@ -405,6 +438,7 @@ describe(`Portal: ${RECEITAS_NOME} - filtros externos`, () => {
     );
   });
 
+  // Testa mês original, outro mês e a mesma consulta em um ano diferente.
   it("filtra pelo mês do registro, por outro mês e depois altera o ano", () => {
     obterPeriodoDoPrimeiroRegistro().then((periodoInicial) => {
       const outroMes =

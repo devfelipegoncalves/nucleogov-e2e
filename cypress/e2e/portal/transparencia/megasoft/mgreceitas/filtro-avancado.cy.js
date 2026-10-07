@@ -1,13 +1,23 @@
 /**
  * Testes do filtro avançado da listagem de receitas do módulo
  * Megasoft/Fiorilli.
+ *
+ * O padrão dos cenários é: coletar um valor real no detalhamento, abrir o
+ * filtro avançado, selecionar/pesquisar esse valor, executar a busca e abrir
+ * novamente o primeiro resultado para conferir o campo filtrado.
  */
 
+// Rota padrão do portal; Cypress.env permite executar o mesmo teste em outra
+// prefeitura que possua a mesma implementação Megasoft.
 const RECEITAS_PATH =
   Cypress.env("RECEITAS_PATH") || "/cidadao/transparencia/mgreceitas";
+// Nome usado no describe e nas mensagens de diagnóstico.
 const RECEITAS_NOME = Cypress.env("RECEITAS_NOME") || "mgreceitas";
+// Os selects avançados disparam chamadas assíncronas; este é o timeout comum.
 const LISTAGEM_TIMEOUT = 60000;
+// Seletor genérico das linhas renderizadas pela tabela do portal.
 const SELETOR_LINHAS = ".cont_dados .tb tr[id]";
+// Nomes canônicos usados para validar meses sem depender de acentos ou caixa.
 const MESES = [
   "Janeiro",
   "Fevereiro",
@@ -23,10 +33,16 @@ const MESES = [
   "Dezembro",
 ];
 
+// ---------------------------------------------------------------------------
+// Helpers de texto, mês, órgão e sincronização da listagem
+// ---------------------------------------------------------------------------
+
+// Uniformiza espaços e quebras de linha vindos do HTML.
 function normalizarTexto(texto = "") {
   return String(texto).replace(/\s+/g, " ").trim();
 }
 
+// Remove acentos e converte para minúsculas para comparações flexíveis.
 function normalizarParaComparacao(texto = "") {
   return normalizarTexto(texto)
     .normalize("NFD")
@@ -34,6 +50,7 @@ function normalizarParaComparacao(texto = "") {
     .toLowerCase();
 }
 
+// Converte o nome ou número de um mês para { numero, nome }.
 function obterMes(texto) {
   if (texto && typeof texto === "object" && texto.numero && texto.nome) {
     return texto;
@@ -54,6 +71,7 @@ function obterMes(texto) {
   return { numero, nome: MESES[numero - 1] };
 }
 
+// Compara meses pelo número, aceitando texto do filtro ou do detalhamento.
 function mesesCorrespondem(mesEsperado, mesRetornado) {
   const esperado = obterMes(mesEsperado);
   const retornado = obterMes(mesRetornado);
@@ -61,10 +79,12 @@ function mesesCorrespondem(mesEsperado, mesRetornado) {
   return esperado.numero === retornado.numero;
 }
 
+// Lê o código inicial exibido junto ao nome do órgão, quando existir.
 function obterCodigoOrgao(texto) {
   return normalizarTexto(texto).match(/^\d+/)?.[0] || "";
 }
 
+// Seleciona um termo curto para reduzir a lista do autocomplete de órgãos.
 function obterTermoPesquisaOrgao(texto) {
   const nomeOrgao = normalizarTexto(texto).replace(/^\d+\s*[-.)]\s*/, "");
   const termos = normalizarParaComparacao(nomeOrgao)
@@ -74,6 +94,7 @@ function obterTermoPesquisaOrgao(texto) {
   return termos[termos.length - 1] || nomeOrgao;
 }
 
+// Valida órgão por código ou por texto normalizado.
 function orgaosCorrespondem(orgaoEsperado, orgaoRetornado) {
   const esperado = normalizarParaComparacao(orgaoEsperado);
   const retornado = normalizarParaComparacao(orgaoRetornado);
@@ -88,6 +109,7 @@ function orgaosCorrespondem(orgaoEsperado, orgaoRetornado) {
   );
 }
 
+// Remove linhas de template e retorna somente receitas reais da listagem.
 function obterLinhasValidas($body) {
   return $body
     .find(SELETOR_LINHAS)
@@ -99,6 +121,7 @@ function obterLinhasValidas($body) {
     );
 }
 
+// Espera a listagem terminar de atualizar depois da busca avançada.
 function aguardarRetornoDoFiltro() {
   cy.get(".cont_dados", { timeout: LISTAGEM_TIMEOUT }).should("be.visible");
   return cy.get("body", { timeout: LISTAGEM_TIMEOUT }).should(($body) => {
@@ -113,11 +136,13 @@ function aguardarRetornoDoFiltro() {
   });
 }
 
+// Aguarda os controles do filtro e o primeiro carregamento da tabela.
 function aguardarListagemInicial() {
   cy.get(".filtro", { timeout: LISTAGEM_TIMEOUT }).should("be.visible");
   aguardarRetornoDoFiltro();
 }
 
+// Abre o detalhamento da primeira receita disponível.
 function abrirPrimeiroRegistro() {
   return cy.get("body").then(($body) => {
     const linha = obterLinhasValidas($body)[0];
@@ -130,6 +155,7 @@ function abrirPrimeiroRegistro() {
   });
 }
 
+// Busca um campo do popup pelo label e retorna seu valor visível.
 function obterValorDoDetalhamento(rotuloEsperado) {
   return cy
     .get("#popdetalhes", { timeout: LISTAGEM_TIMEOUT })
@@ -159,6 +185,7 @@ function obterValorDoDetalhamento(rotuloEsperado) {
     });
 }
 
+// Fecha o popup e confirma que ele saiu do DOM antes da próxima ação.
 function fecharDetalhamento() {
   return cy
     .get("#popdetalhes #close", { timeout: LISTAGEM_TIMEOUT })
@@ -166,6 +193,7 @@ function fecharDetalhamento() {
     .then(() => cy.get("#popdetalhes").should("not.exist"));
 }
 
+// Coleta o órgão da primeira receita para alimentar o filtro avançado.
 function obterOrgaoDoPrimeiroRegistro() {
   abrirPrimeiroRegistro();
   return obterValorDoDetalhamento("Órgão").then((orgao) => {
@@ -173,6 +201,7 @@ function obterOrgaoDoPrimeiroRegistro() {
   });
 }
 
+// Coleta e valida o ano de quatro dígitos do primeiro detalhamento.
 function obterAnoDoPrimeiroRegistro() {
   abrirPrimeiroRegistro();
   return obterValorDoDetalhamento("Ano").then((ano) => {
@@ -186,6 +215,7 @@ function obterAnoDoPrimeiroRegistro() {
   });
 }
 
+// Coleta e normaliza o mês do primeiro detalhamento.
 function obterMesDoPrimeiroRegistro() {
   abrirPrimeiroRegistro();
   return obterValorDoDetalhamento("Mês").then((mes) => {
@@ -197,6 +227,7 @@ function obterMesDoPrimeiroRegistro() {
   });
 }
 
+// Compara categorias aceitando textos completos ou abreviados pelo portal.
 function categoriasCorrespondem(categoriaEsperada, categoriaRetornada) {
   const esperado = normalizarParaComparacao(categoriaEsperada);
   const retornado = normalizarParaComparacao(categoriaRetornada);
@@ -208,6 +239,7 @@ function categoriasCorrespondem(categoriaEsperada, categoriaRetornada) {
   );
 }
 
+// Escolhe a última palavra útil para pesquisar selects grandes.
 function obterTermoPesquisaCategoria(categoria) {
   const termos = normalizarTexto(categoria)
     .split(/\s+/)
@@ -216,10 +248,12 @@ function obterTermoPesquisaCategoria(categoria) {
   return termos[termos.length - 1] || normalizarTexto(categoria);
 }
 
+// Origem usa a mesma regra de termo de pesquisa das demais descrições.
 function obterTermoPesquisaOrigem(origem) {
   return obterTermoPesquisaCategoria(origem);
 }
 
+// Obtém a categoria econômica real que será aplicada no filtro avançado.
 function obterCategoriaEconomicaDoPrimeiroRegistro() {
   abrirPrimeiroRegistro();
   return obterValorDoDetalhamento("Categoria Econômica").then((categoria) => {
@@ -236,6 +270,7 @@ function obterCategoriaEconomicaDoPrimeiroRegistro() {
   });
 }
 
+// Localiza um campo aceitando mais de um label possível para a mesma origem.
 function obterValorDoDetalhamentoComRotulos(rotulosEsperados) {
   const rotulosNormalizados = rotulosEsperados.map(normalizarParaComparacao);
 
@@ -277,6 +312,7 @@ function obterValorDoDetalhamentoComRotulos(rotulosEsperados) {
     });
 }
 
+// Obtém a origem do detalhe, sem confundir com origem dos recursos.
 function obterOrigemDoPrimeiroRegistro() {
   abrirPrimeiroRegistro();
   return obterValorDoDetalhamentoComRotulos(["Origem"]).then((origem) => {
@@ -290,6 +326,11 @@ function obterOrigemDoPrimeiroRegistro() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Helpers do painel e dos selects do filtro avançado
+// ---------------------------------------------------------------------------
+
+// Abre o filtro avançado, pesquisa o órgão e seleciona a opção correspondente.
 function selecionarOrgaoNoFiltroAvancado(orgaoEsperado) {
   cy.get("#busca_avancada", { timeout: LISTAGEM_TIMEOUT })
     .should("be.visible")
@@ -348,6 +389,7 @@ function selecionarOrgaoNoFiltroAvancado(orgaoEsperado) {
     });
 }
 
+// Clica em PESQUISAR e espera o popup fechar e a tabela atualizar.
 function executarBuscaAvancada() {
   cy.get("#btnBuscar", { timeout: LISTAGEM_TIMEOUT })
     .should("be.visible")
@@ -358,6 +400,7 @@ function executarBuscaAvancada() {
   return aguardarRetornoDoFiltro();
 }
 
+// Abre o painel/modal que contém os filtros avançados.
 function abrirFiltroAvancado() {
   return cy
     .get("#busca_avancada", { timeout: LISTAGEM_TIMEOUT })
@@ -365,6 +408,7 @@ function abrirFiltroAvancado() {
     .click({ force: true });
 }
 
+// Abre o select de ano dentro do filtro avançado.
 function abrirSelectAnoNoFiltroAvancado() {
   return cy
     .get("#select_ano .selected", { timeout: LISTAGEM_TIMEOUT })
@@ -372,6 +416,7 @@ function abrirSelectAnoNoFiltroAvancado() {
     .click({ force: true });
 }
 
+// Descobre o id do select de mês, pois ele varia entre versões do portal.
 function obterSeletorMesNoFiltroAvancado() {
   return cy.get("body").then(($body) => {
     const elemento = Array.from($body.find("[id]")).find((item) =>
@@ -383,6 +428,7 @@ function obterSeletorMesNoFiltroAvancado() {
   });
 }
 
+// Abre o select de mês e devolve o seletor encontrado dinamicamente.
 function abrirSelectMesNoFiltroAvancado() {
   return obterSeletorMesNoFiltroAvancado().then((seletor) =>
     cy
@@ -393,6 +439,7 @@ function abrirSelectMesNoFiltroAvancado() {
   );
 }
 
+// Pesquisa e seleciona um ano quando o painel avançado já está aberto.
 function selecionarAnoNoFiltroAvancadoAberto(anoEsperado) {
   const ano = String(anoEsperado);
 
@@ -428,12 +475,14 @@ function selecionarAnoNoFiltroAvancadoAberto(anoEsperado) {
     });
 }
 
+// Fluxo completo para abrir o filtro e escolher um ano específico.
 function selecionarAnoNoFiltroAvancado(anoEsperado) {
   abrirFiltroAvancado();
   abrirSelectAnoNoFiltroAvancado();
   return selecionarAnoNoFiltroAvancadoAberto(anoEsperado);
 }
 
+// Escolhe qualquer ano diferente do atual para testar uma segunda consulta.
 function selecionarOutroAnoNoFiltroAvancado(anoAtual) {
   abrirFiltroAvancado();
   abrirSelectAnoNoFiltroAvancado();
@@ -462,6 +511,7 @@ function selecionarOutroAnoNoFiltroAvancado(anoAtual) {
     });
 }
 
+// Pesquisa e seleciona um mês com o select já aberto.
 function selecionarMesNoFiltroAvancadoAberto(seletor, mesEsperado) {
   const mes = obterMes(mesEsperado);
 
@@ -498,6 +548,7 @@ function selecionarMesNoFiltroAvancadoAberto(seletor, mesEsperado) {
     });
 }
 
+// Fluxo completo para abrir o painel e selecionar um mês.
 function selecionarMesNoFiltroAvancado(mesEsperado) {
   abrirFiltroAvancado();
   return abrirSelectMesNoFiltroAvancado().then((seletor) =>
@@ -505,6 +556,7 @@ function selecionarMesNoFiltroAvancado(mesEsperado) {
   );
 }
 
+// Escolhe um mês diferente do primeiro para validar a troca de filtro.
 function selecionarOutroMesNoFiltroAvancado(mesAtual) {
   abrirFiltroAvancado();
 
@@ -528,6 +580,7 @@ function selecionarOutroMesNoFiltroAvancado(mesAtual) {
   );
 }
 
+// Localiza dinamicamente o select de categoria econômica.
 function obterSeletorCategoriaEconomicaNoFiltroAvancado() {
   return cy.get("body").then(($body) => {
     const elemento = Array.from($body.find("[id]")).find((item) =>
@@ -539,6 +592,7 @@ function obterSeletorCategoriaEconomicaNoFiltroAvancado() {
   });
 }
 
+// Abre o select de categoria e retorna seu seletor para a seleção seguinte.
 function abrirSelectCategoriaEconomicaNoFiltroAvancado() {
   return obterSeletorCategoriaEconomicaNoFiltroAvancado().then((seletor) =>
     cy
@@ -549,6 +603,7 @@ function abrirSelectCategoriaEconomicaNoFiltroAvancado() {
   );
 }
 
+// Pesquisa e seleciona a categoria econômica no select aberto.
 function selecionarCategoriaEconomicaNoFiltroAvancadoAberto(
   seletor,
   categoriaEsperada,
@@ -594,6 +649,7 @@ function selecionarCategoriaEconomicaNoFiltroAvancadoAberto(
     });
 }
 
+// Fluxo completo de abertura e seleção da categoria econômica.
 function selecionarCategoriaEconomicaNoFiltroAvancado(categoriaEsperada) {
   abrirFiltroAvancado();
   return abrirSelectCategoriaEconomicaNoFiltroAvancado().then((seletor) =>
@@ -604,6 +660,7 @@ function selecionarCategoriaEconomicaNoFiltroAvancado(categoriaEsperada) {
   );
 }
 
+// Compara a origem escolhida com a origem apresentada no detalhamento.
 function origensCorrespondem(origemEsperada, origemRetornada) {
   const esperado = normalizarParaComparacao(origemEsperada);
   const retornado = normalizarParaComparacao(origemRetornada);
@@ -615,6 +672,7 @@ function origensCorrespondem(origemEsperada, origemRetornada) {
   );
 }
 
+// Localiza o select de origem mesmo quando o id muda entre portais.
 function obterSeletorOrigemNoFiltroAvancado() {
   return cy.get("body").then(($body) => {
     const elemento = Array.from($body.find("[id]")).find((item) =>
@@ -626,6 +684,7 @@ function obterSeletorOrigemNoFiltroAvancado() {
   });
 }
 
+// Abre o select de origem e retorna o seletor identificado.
 function abrirSelectOrigemNoFiltroAvancado() {
   return obterSeletorOrigemNoFiltroAvancado().then((seletor) =>
     cy
@@ -636,6 +695,7 @@ function abrirSelectOrigemNoFiltroAvancado() {
   );
 }
 
+// Preenche o autocomplete e aciona seu controle de busca ou Enter.
 function pesquisarAutocompleteDeSelect(seletor, termoPesquisa) {
   return cy
     .get(`${seletor} .options input:visible`, { timeout: LISTAGEM_TIMEOUT })
@@ -679,6 +739,7 @@ function pesquisarAutocompleteDeSelect(seletor, termoPesquisa) {
     });
 }
 
+// Seleciona a origem correspondente depois que o autocomplete foi filtrado.
 function selecionarOrigemNoFiltroAvancadoAberto(seletor, origemEsperada) {
   const termoPesquisa = obterTermoPesquisaOrigem(origemEsperada);
 
@@ -712,6 +773,7 @@ function selecionarOrigemNoFiltroAvancadoAberto(seletor, origemEsperada) {
   );
 }
 
+// Fluxo completo de abertura, pesquisa e seleção da origem.
 function selecionarOrigemNoFiltroAvancado(origemEsperada) {
   abrirFiltroAvancado();
   return abrirSelectOrigemNoFiltroAvancado().then((seletor) =>
@@ -719,6 +781,7 @@ function selecionarOrigemNoFiltroAvancado(origemEsperada) {
   );
 }
 
+// Compara espécie esperada e espécie retornada sem depender de formatação.
 function especiesCorrespondem(especieEsperada, especieRetornada) {
   const esperado = normalizarParaComparacao(especieEsperada);
   const retornado = normalizarParaComparacao(especieRetornada);
@@ -730,6 +793,7 @@ function especiesCorrespondem(especieEsperada, especieRetornada) {
   );
 }
 
+// Obtém a espécie do primeiro registro para usar como massa do filtro.
 function obterEspecieDoPrimeiroRegistro() {
   abrirPrimeiroRegistro();
   return obterValorDoDetalhamento("Espécie").then((especie) => {
@@ -743,6 +807,7 @@ function obterEspecieDoPrimeiroRegistro() {
   });
 }
 
+// Localiza dinamicamente o select de espécie no painel avançado.
 function obterSeletorEspecieNoFiltroAvancado() {
   return cy.get("body").then(($body) => {
     const elemento = Array.from($body.find("[id]")).find((item) =>
@@ -754,6 +819,7 @@ function obterSeletorEspecieNoFiltroAvancado() {
   });
 }
 
+// Abre o select de espécie e retorna o seletor encontrado.
 function abrirSelectEspecieNoFiltroAvancado() {
   return obterSeletorEspecieNoFiltroAvancado().then((seletor) =>
     cy
@@ -764,6 +830,7 @@ function abrirSelectEspecieNoFiltroAvancado() {
   );
 }
 
+// Pesquisa e seleciona a espécie no select aberto.
 function selecionarEspecieNoFiltroAvancadoAberto(seletor, especieEsperada) {
   const termoPesquisa = obterTermoPesquisaCategoria(especieEsperada);
 
@@ -797,6 +864,7 @@ function selecionarEspecieNoFiltroAvancadoAberto(seletor, especieEsperada) {
   );
 }
 
+// Fluxo completo de abertura e seleção da espécie.
 function selecionarEspecieNoFiltroAvancado(especieEsperada) {
   abrirFiltroAvancado();
   return abrirSelectEspecieNoFiltroAvancado().then((seletor) =>
@@ -804,6 +872,11 @@ function selecionarEspecieNoFiltroAvancado(especieEsperada) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Helpers de detalhamento, Fonte e valores monetários
+// ---------------------------------------------------------------------------
+
+// Compara detalhamento completo e abreviado retornado pelo componente.
 function detalhamentosCorrespondem(
   detalhamentoEsperado,
   detalhamentoRetornado,
@@ -818,6 +891,7 @@ function detalhamentosCorrespondem(
   );
 }
 
+// Obtém o campo Detalhamento da primeira receita disponível.
 function obterDetalhamentoDoPrimeiroRegistro() {
   abrirPrimeiroRegistro();
   return obterValorDoDetalhamento("Detalhamento").then((detalhamento) => {
@@ -834,6 +908,7 @@ function obterDetalhamentoDoPrimeiroRegistro() {
   });
 }
 
+// Localiza dinamicamente o select de detalhamento.
 function obterSeletorDetalhamentoNoFiltroAvancado() {
   return cy.get("body").then(($body) => {
     const elemento = Array.from($body.find("[id]")).find((item) =>
@@ -845,6 +920,7 @@ function obterSeletorDetalhamentoNoFiltroAvancado() {
   });
 }
 
+// Abre o select de detalhamento e retorna seu seletor.
 function abrirSelectDetalhamentoNoFiltroAvancado() {
   return obterSeletorDetalhamentoNoFiltroAvancado().then((seletor) =>
     cy
@@ -855,6 +931,7 @@ function abrirSelectDetalhamentoNoFiltroAvancado() {
   );
 }
 
+// Pesquisa e seleciona o detalhamento no select já aberto.
 function selecionarDetalhamentoNoFiltroAvancadoAberto(
   seletor,
   detalhamentoEsperado,
@@ -900,6 +977,7 @@ function selecionarDetalhamentoNoFiltroAvancadoAberto(
   );
 }
 
+// Fluxo completo de abertura, pesquisa e seleção do detalhamento.
 function selecionarDetalhamentoNoFiltroAvancado(detalhamentoEsperado) {
   abrirFiltroAvancado();
   return abrirSelectDetalhamentoNoFiltroAvancado().then((seletor) =>
@@ -907,6 +985,7 @@ function selecionarDetalhamentoNoFiltroAvancado(detalhamentoEsperado) {
   );
 }
 
+// Compara a fonte selecionada com a fonte exibida no resultado.
 function fontesCorrespondem(fonteEsperada, fonteRetornada) {
   const esperado = normalizarParaComparacao(fonteEsperada);
   const retornado = normalizarParaComparacao(fonteRetornada);
@@ -918,6 +997,7 @@ function fontesCorrespondem(fonteEsperada, fonteRetornada) {
   );
 }
 
+// Obtém a Fonte do primeiro registro para alimentar o filtro.
 function obterFonteDoPrimeiroRegistro() {
   abrirPrimeiroRegistro();
   return obterValorDoDetalhamento("Fonte").then((fonte) => {
@@ -931,6 +1011,7 @@ function obterFonteDoPrimeiroRegistro() {
   });
 }
 
+// Localiza dinamicamente o select de Fonte no filtro avançado.
 function obterSeletorFonteNoFiltroAvancado() {
   return cy.get("body").then(($body) => {
     const elemento = Array.from($body.find("[id]")).find((item) =>
@@ -942,6 +1023,7 @@ function obterSeletorFonteNoFiltroAvancado() {
   });
 }
 
+// Abre o select de Fonte e retorna seu seletor.
 function abrirSelectFonteNoFiltroAvancado() {
   return obterSeletorFonteNoFiltroAvancado().then((seletor) =>
     cy
@@ -952,6 +1034,7 @@ function abrirSelectFonteNoFiltroAvancado() {
   );
 }
 
+// Pesquisa e seleciona a Fonte no select aberto.
 function selecionarFonteNoFiltroAvancadoAberto(seletor, fonteEsperada) {
   const termoPesquisa = obterTermoPesquisaCategoria(fonteEsperada);
 
@@ -983,6 +1066,7 @@ function selecionarFonteNoFiltroAvancadoAberto(seletor, fonteEsperada) {
   );
 }
 
+// Fluxo completo de abertura, pesquisa e seleção da Fonte.
 function selecionarFonteNoFiltroAvancado(fonteEsperada) {
   abrirFiltroAvancado();
   return abrirSelectFonteNoFiltroAvancado().then((seletor) =>
@@ -990,6 +1074,7 @@ function selecionarFonteNoFiltroAvancado(fonteEsperada) {
   );
 }
 
+// Converte moeda brasileira, como "R$ 1.234,56", em número JavaScript.
 function normalizarValorMonetario(valor) {
   const texto = normalizarTexto(valor).replace(/[^\d,.-]/g, "");
 
@@ -1000,6 +1085,7 @@ function normalizarValorMonetario(valor) {
   return Number(texto);
 }
 
+// Compara valores com tolerância de centavos e fallback textual.
 function valoresPrevistosCorrespondem(valorEsperado, valorRetornado) {
   const esperado = normalizarValorMonetario(valorEsperado);
   const retornado = normalizarValorMonetario(valorRetornado);
@@ -1014,6 +1100,7 @@ function valoresPrevistosCorrespondem(valorEsperado, valorRetornado) {
   );
 }
 
+// Obtém o Valor Previsto do primeiro registro.
 function obterValorPrevistoDoPrimeiroRegistro() {
   abrirPrimeiroRegistro();
   return obterValorDoDetalhamento("Valor Previsto").then((valor) => {
@@ -1030,6 +1117,7 @@ function obterValorPrevistoDoPrimeiroRegistro() {
   });
 }
 
+// Localiza o input numérico de Valor Previsto no painel avançado.
 function obterCampoValorPrevistoNoFiltroAvancado() {
   return cy.get("body").then(($body) => {
     const campo = Array.from($body.find(".campo")).find((elemento) => {
@@ -1046,6 +1134,7 @@ function obterCampoValorPrevistoNoFiltroAvancado() {
   });
 }
 
+// Preenche Valor Previsto somente com caracteres aceitos pelo input numérico.
 function preencherValorPrevistoNoFiltroAvancado(valorEsperado) {
   const valorParaPesquisa = normalizarTexto(valorEsperado).replace(
     /[^\d,.-]/g,
@@ -1061,6 +1150,7 @@ function preencherValorPrevistoNoFiltroAvancado(valorEsperado) {
     .then(() => cy.wrap({ valorEsperado, valorParaPesquisa }, { log: false }));
 }
 
+// Obtém o Valor Arrecadado do primeiro registro.
 function obterValorArrecadadoDoPrimeiroRegistro() {
   abrirPrimeiroRegistro();
   return obterValorDoDetalhamento("Valor Arrecadado").then((valor) => {
@@ -1077,6 +1167,7 @@ function obterValorArrecadadoDoPrimeiroRegistro() {
   });
 }
 
+// Localiza o input numérico de Valor Arrecadado.
 function obterCampoValorArrecadadoNoFiltroAvancado() {
   return cy.get("body").then(($body) => {
     const campo = Array.from($body.find(".campo")).find((elemento) => {
@@ -1093,6 +1184,7 @@ function obterCampoValorArrecadadoNoFiltroAvancado() {
   });
 }
 
+// Preenche Valor Arrecadado no formato esperado pela API do filtro.
 function preencherValorArrecadadoNoFiltroAvancado(valorEsperado) {
   const valorNumerico = normalizarValorMonetario(valorEsperado);
   const valorParaPesquisa = Number.isFinite(valorNumerico)
@@ -1118,6 +1210,7 @@ function preencherValorArrecadadoNoFiltroAvancado(valorEsperado) {
     });
 }
 
+// Obtém o Valor Acumulado do primeiro registro.
 function obterValorAcumuladoDoPrimeiroRegistro() {
   abrirPrimeiroRegistro();
   return obterValorDoDetalhamento("Valor Acumulado").then((valor) => {
@@ -1134,6 +1227,7 @@ function obterValorAcumuladoDoPrimeiroRegistro() {
   });
 }
 
+// Localiza o input numérico de Valor Acumulado.
 function obterCampoValorAcumuladoNoFiltroAvancado() {
   return cy.get("body").then(($body) => {
     const campo = Array.from($body.find(".campo")).find((elemento) => {
@@ -1150,6 +1244,7 @@ function obterCampoValorAcumuladoNoFiltroAvancado() {
   });
 }
 
+// Preenche Valor Acumulado no formato aceito pelo filtro avançado.
 function preencherValorAcumuladoNoFiltroAvancado(valorEsperado) {
   const valorNumerico = normalizarValorMonetario(valorEsperado);
   const valorParaPesquisa = Number.isFinite(valorNumerico)
@@ -1175,6 +1270,11 @@ function preencherValorAcumuladoNoFiltroAvancado(valorEsperado) {
     });
 }
 
+// ---------------------------------------------------------------------------
+// Validadores: todos exigem pelo menos uma linha e conferem o detalhamento
+// ---------------------------------------------------------------------------
+
+// Valida o órgão do primeiro resultado e trata explicitamente listas vazias.
 function validarOrgaoDoResultadoAvancado({ orgaoSelecionado }) {
   return cy.get("body").then(($body) => {
     const linhas = obterLinhasValidas($body);
@@ -1222,6 +1322,7 @@ function validarOrgaoDoResultadoAvancado({ orgaoSelecionado }) {
   });
 }
 
+// Valida se o ano do detalhamento coincide com o ano escolhido.
 function validarAnoDoResultadoAvancado({ anoSelecionado }) {
   return cy.get("body").then(($body) => {
     const linhas = obterLinhasValidas($body);
@@ -1269,6 +1370,7 @@ function validarAnoDoResultadoAvancado({ anoSelecionado }) {
   });
 }
 
+// Valida o mês do detalhamento usando comparação numérica normalizada.
 function validarMesDoResultadoAvancado({ mesEsperado, mesSelecionado }) {
   return cy.get("body").then(($body) => {
     const linhas = obterLinhasValidas($body);
@@ -1316,6 +1418,7 @@ function validarMesDoResultadoAvancado({ mesEsperado, mesSelecionado }) {
   });
 }
 
+// Valida a categoria econômica do primeiro resultado filtrado.
 function validarCategoriaEconomicaDoResultadoAvancado({
   categoriaEsperada,
   categoriaSelecionada,
@@ -1368,6 +1471,7 @@ function validarCategoriaEconomicaDoResultadoAvancado({
   });
 }
 
+// Valida a Origem do detalhe, separada de Origem dos Recursos.
 function validarOrigemDoResultadoAvancado({
   origemEsperada,
   origemSelecionada,
@@ -1420,6 +1524,7 @@ function validarOrigemDoResultadoAvancado({
   });
 }
 
+// Valida a espécie retornada depois da busca avançada.
 function validarEspecieDoResultadoAvancado({
   especieEsperada,
   especieSelecionada,
@@ -1470,6 +1575,7 @@ function validarEspecieDoResultadoAvancado({
   });
 }
 
+// Valida o texto de Detalhamento retornado pela listagem filtrada.
 function validarDetalhamentoDoResultadoAvancado({
   detalhamentoEsperado,
   detalhamentoSelecionado,
@@ -1525,6 +1631,7 @@ function validarDetalhamentoDoResultadoAvancado({
   });
 }
 
+// Valida a Fonte do primeiro resultado após a consulta.
 function validarFonteDoResultadoAvancado({ fonteEsperada, fonteSelecionada }) {
   return cy.get("body").then(($body) => {
     const linhas = obterLinhasValidas($body);
@@ -1572,6 +1679,7 @@ function validarFonteDoResultadoAvancado({ fonteEsperada, fonteSelecionada }) {
   });
 }
 
+// Valida o Valor Previsto comparando numericamente os centavos.
 function validarValorPrevistoDoResultadoAvancado({
   valorEsperado,
   valorParaPesquisa,
@@ -1622,6 +1730,7 @@ function validarValorPrevistoDoResultadoAvancado({
   });
 }
 
+// Valida o Valor Arrecadado e exige que a API retorne uma linha.
 function validarValorArrecadadoDoResultadoAvancado({
   valorEsperado,
   valorParaPesquisa,
@@ -1647,6 +1756,7 @@ function validarValorArrecadadoDoResultadoAvancado({
   });
 }
 
+// Valida o Valor Acumulado e exige que a API retorne uma linha.
 function validarValorAcumuladoDoResultadoAvancado({
   valorEsperado,
   valorParaPesquisa,
@@ -1672,12 +1782,14 @@ function validarValorAcumuladoDoResultadoAvancado({
   });
 }
 
+// Cada cenário abre uma página nova para isolar o filtro em teste.
 describe(`Portal: ${RECEITAS_NOME} - filtro avançado`, () => {
   beforeEach(() => {
     cy.visitPortal(RECEITAS_PATH);
     aguardarListagemInicial();
   });
 
+  // Coleta o órgão no detalhe, aplica a busca e confere o primeiro retorno.
   it("busca um órgão no filtro avançado e valida o resultado", () => {
     obterOrgaoDoPrimeiroRegistro()
       .then((orgaoEsperado) => selecionarOrgaoNoFiltroAvancado(orgaoEsperado))
@@ -1685,6 +1797,7 @@ describe(`Portal: ${RECEITAS_NOME} - filtro avançado`, () => {
       .then((resultado) => validarOrgaoDoResultadoAvancado(resultado));
   });
 
+  // Testa o ano do registro e depois uma segunda opção de ano.
   it("busca dois anos no filtro avançado e valida os resultados", () => {
     obterAnoDoPrimeiroRegistro()
       .then((anoInicial) => selecionarAnoNoFiltroAvancado(anoInicial))
@@ -1699,6 +1812,7 @@ describe(`Portal: ${RECEITAS_NOME} - filtro avançado`, () => {
       .then((resultado) => validarAnoDoResultadoAvancado(resultado));
   });
 
+  // Testa o mês do registro e depois uma segunda opção de mês.
   it("busca dois meses no filtro avançado e valida os resultados", () => {
     obterMesDoPrimeiroRegistro()
       .then((mesInicial) => selecionarMesNoFiltroAvancado(mesInicial))
@@ -1713,6 +1827,7 @@ describe(`Portal: ${RECEITAS_NOME} - filtro avançado`, () => {
       .then((resultado) => validarMesDoResultadoAvancado(resultado));
   });
 
+  // Usa a categoria do detalhe como massa real para o select avançado.
   it("busca a categoria econômica no filtro avançado e valida o resultado", () => {
     obterCategoriaEconomicaDoPrimeiroRegistro()
       .then((categoria) =>
@@ -1724,6 +1839,7 @@ describe(`Portal: ${RECEITAS_NOME} - filtro avançado`, () => {
       );
   });
 
+  // Confere especificamente o campo Origem do detalhamento.
   it("busca a origem no filtro avançado e valida o resultado", () => {
     obterOrigemDoPrimeiroRegistro()
       .then((origem) => selecionarOrigemNoFiltroAvancado(origem))
@@ -1731,6 +1847,7 @@ describe(`Portal: ${RECEITAS_NOME} - filtro avançado`, () => {
       .then((resultado) => validarOrigemDoResultadoAvancado(resultado));
   });
 
+  // Filtra pela espécie do registro e compara o detalhe retornado.
   it("busca a espécie no filtro avançado e valida o resultado", () => {
     obterEspecieDoPrimeiroRegistro()
       .then((especie) => selecionarEspecieNoFiltroAvancado(especie))
@@ -1738,6 +1855,7 @@ describe(`Portal: ${RECEITAS_NOME} - filtro avançado`, () => {
       .then((resultado) => validarEspecieDoResultadoAvancado(resultado));
   });
 
+  // Filtra pelo detalhamento textual do registro.
   it("busca o detalhamento no filtro avançado e valida o resultado", () => {
     obterDetalhamentoDoPrimeiroRegistro()
       .then((detalhamento) =>
@@ -1747,6 +1865,7 @@ describe(`Portal: ${RECEITAS_NOME} - filtro avançado`, () => {
       .then((resultado) => validarDetalhamentoDoResultadoAvancado(resultado));
   });
 
+  // Filtra pela Fonte e confere o mesmo campo no retorno.
   it("busca a Fonte no filtro avançado e valida o resultado", () => {
     obterFonteDoPrimeiroRegistro()
       .then((fonte) => selecionarFonteNoFiltroAvancado(fonte))
@@ -1754,6 +1873,7 @@ describe(`Portal: ${RECEITAS_NOME} - filtro avançado`, () => {
       .then((resultado) => validarFonteDoResultadoAvancado(resultado));
   });
 
+  // Preenche o input de Valor Previsto, sem tratá-lo como select.
   it("busca o Valor Previsto no filtro avançado e valida o resultado", () => {
     obterValorPrevistoDoPrimeiroRegistro()
       .then((valor) => preencherValorPrevistoNoFiltroAvancado(valor))
@@ -1761,6 +1881,7 @@ describe(`Portal: ${RECEITAS_NOME} - filtro avançado`, () => {
       .then((resultado) => validarValorPrevistoDoResultadoAvancado(resultado));
   });
 
+  // Preenche o input de Valor Arrecadado e confere o detalhe retornado.
   it("busca o Valor Arrecadado no filtro avançado e valida o resultado", () => {
     obterValorArrecadadoDoPrimeiroRegistro()
       .then((valor) => preencherValorArrecadadoNoFiltroAvancado(valor))
@@ -1770,6 +1891,7 @@ describe(`Portal: ${RECEITAS_NOME} - filtro avançado`, () => {
       );
   });
 
+  // Preenche o input de Valor Acumulado e confere o detalhe retornado.
   it("busca o Valor Acumulado no filtro avançado e valida o resultado", () => {
     obterValorAcumuladoDoPrimeiroRegistro()
       .then((valor) => preencherValorAcumuladoNoFiltroAvancado(valor))

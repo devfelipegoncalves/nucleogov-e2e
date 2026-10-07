@@ -4,12 +4,19 @@
  * Para cada formato disponibilizado pelo portal, o teste abre o primeiro
  * registro, guarda todos os campos preenchidos do detalhamento, exporta a
  * listagem e compara esses valores com o arquivo baixado.
+ *
+ * A comparação é feita por uma task Node configurada no cypress.config.js,
+ * porque o arquivo baixado fica fora do DOM do navegador.
  */
 
+// Rota do módulo testado; permite reutilização por meio de Cypress.env.
 const RECEITAS_PATH =
   Cypress.env("RECEITAS_PATH") || "/cidadao/transparencia/mgreceitas";
+// Nome lógico usado no título do suite e nos logs de diagnóstico.
 const RECEITAS_NOME = Cypress.env("RECEITAS_NOME") || "mgreceitas";
+// Exportações e downloads podem demorar mais que uma interação comum.
 const LISTAGEM_TIMEOUT = 60000;
+// Nome principal e nomes alternativos aceitos pelo backend de exportação.
 const NOME_ARQUIVO_EXPORTACAO =
   Cypress.env("RECEITAS_EXPORTACAO_NOME") || "relatorio-receitas";
 const NOMES_ARQUIVOS_EXPORTACAO = [
@@ -17,6 +24,7 @@ const NOMES_ARQUIVOS_EXPORTACAO = [
   "relatorio-receitas",
   "relatorio-receita",
 ];
+// O menu do portal deve disponibilizar exatamente estes seis formatos.
 const FORMATOS_ESPERADOS = [
   { nome: "HTML", extensao: "html" },
   { nome: "CSV", extensao: "csv" },
@@ -25,6 +33,7 @@ const FORMATOS_ESPERADOS = [
   { nome: "JSON", extensao: "json" },
   { nome: "XML", extensao: "xml" },
 ];
+// Usado para converter o mês textual do detalhe no número exportado.
 const MESES = [
   "janeiro",
   "fevereiro",
@@ -40,10 +49,12 @@ const MESES = [
   "dezembro",
 ];
 
+// Remove quebras e espaços duplicados dos textos coletados no DOM.
 function normalizarTexto(texto = "") {
   return String(texto).replace(/\s+/g, " ").trim();
 }
 
+// Normaliza acentos e caixa para comparar labels e opções do menu.
 function normalizarParaComparacao(texto = "") {
   return normalizarTexto(texto)
     .normalize("NFD")
@@ -51,6 +62,8 @@ function normalizarParaComparacao(texto = "") {
     .toLowerCase();
 }
 
+// Ajusta somente diferenças de representação entre detalhe e exportação:
+// mês numérico, órgão sem código e moeda sem o prefixo "R$".
 function obterValorExportado({ label, value }) {
   const labelNormalizado = normalizarParaComparacao(label);
   const valorNormalizado = normalizarParaComparacao(value);
@@ -76,6 +89,7 @@ function obterValorExportado({ label, value }) {
   return value;
 }
 
+// Cria uma cópia dos campos, preservando a coleta original para os logs.
 function prepararCamposParaExportacao(campos) {
   return campos.map((campo) => ({
     ...campo,
@@ -83,6 +97,7 @@ function prepararCamposParaExportacao(campos) {
   }));
 }
 
+// Aguarda a tabela e garante que nenhum carregador ainda esteja visível.
 function aguardarListagem() {
   cy.get(".cont_dados", { timeout: LISTAGEM_TIMEOUT }).should("be.visible");
   return cy.get("body", { timeout: LISTAGEM_TIMEOUT }).should(($body) => {
@@ -97,6 +112,7 @@ function aguardarListagem() {
   });
 }
 
+// Retorna apenas linhas de receitas reais, sem template ou marcador vazio.
 function obterLinhasDeDados() {
   return cy.get(".cont_dados .tb tr[id]").then(($linhas) =>
     Array.from($linhas).filter(
@@ -108,6 +124,7 @@ function obterLinhasDeDados() {
   );
 }
 
+// Coleta label e valor de todos os campos do popup, inclusive vazios.
 function obterCamposDoDetalhamento($popup) {
   const campos = Array.from($popup[0].querySelectorAll("label"))
     .map((label) => {
@@ -135,6 +152,7 @@ function obterCamposDoDetalhamento($popup) {
   return campos;
 }
 
+// Abre a primeira receita, coleta o detalhe completo e fecha o popup.
 function obterDetalhamentoDaPrimeiraReceita() {
   obterLinhasDeDados().then((linhas) => {
     expect(linhas.length, "receitas disponíveis para exportação").to.be.at.least(
@@ -174,6 +192,7 @@ function obterDetalhamentoDaPrimeiraReceita() {
     });
 }
 
+// Traduz o texto visível do menu para a extensão esperada pelo download.
 function obterFormato(texto) {
   const formato = normalizarParaComparacao(texto);
 
@@ -187,6 +206,7 @@ function obterFormato(texto) {
   return "arquivo";
 }
 
+// Abre o menu EXPORTAR e retorna seus itens visíveis.
 function obterOpcoesDeExportacao() {
   cy.get("#exportar button.export", { timeout: LISTAGEM_TIMEOUT })
     .should("be.visible")
@@ -204,6 +224,7 @@ function obterOpcoesDeExportacao() {
     );
 }
 
+// Garante que o portal oferece exatamente os formatos cobertos pelo suite.
 function validarFormatosDisponiveis(opcoes) {
   const formatosDisponiveis = opcoes.map(obterFormato);
   const extensoesEsperadas = FORMATOS_ESPERADOS.map(({ extensao }) => extensao);
@@ -218,12 +239,14 @@ function validarFormatosDisponiveis(opcoes) {
   ).to.have.length(extensoesEsperadas.length);
 }
 
+// Monta os nomes possíveis que o task Node deve localizar na pasta de downloads.
 function nomesDosArquivos(formato) {
   return NOMES_ARQUIVOS_EXPORTACAO.map(
     (nome) => `${nome}.${formato}`,
   ).filter((nome, indice, nomes) => nomes.indexOf(nome) === indice);
 }
 
+// Aguarda o arquivo baixado e exige que todos os valores do detalhe apareçam.
 function validarArquivoExportado(formato, detalhamento) {
   const nomes = nomesDosArquivos(formato);
 
@@ -270,6 +293,7 @@ function validarArquivoExportado(formato, detalhamento) {
   });
 }
 
+// Remove um download antigo, clica no formato e inicia sua validação.
 function exportarOpcao(texto, formato, detalhamento) {
   const nomes = nomesDosArquivos(formato);
 
@@ -282,12 +306,14 @@ function exportarOpcao(texto, formato, detalhamento) {
   });
 }
 
+// Cada formato é um teste independente para facilitar diagnóstico no Cypress.
 describe(`Portal: ${RECEITAS_NOME} - exportações`, () => {
   beforeEach(() => {
     cy.visitPortal(RECEITAS_PATH);
     aguardarListagem();
   });
 
+  // A criação dos testes é síncrona; o acesso ao portal ocorre durante cada it.
   FORMATOS_ESPERADOS.forEach(({ nome, extensao }) => {
     it(`exporta ${nome} e compara todos os campos com o detalhamento`, () => {
       obterDetalhamentoDaPrimeiraReceita().then((detalhamento) => {
