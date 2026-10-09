@@ -6,7 +6,7 @@
  * valida os registros, datas ou mensagens devolvidas pelo portal.
  *
  * Execução:
- * npm run cy:run -- --spec "cypress/e2e/portal/transparencia/megasoft/sgdespesas/filtros-externos.cy.js"
+ * npm run cy:run -- --spec "cypress/e2e/portal/transparencia/rotinas/sgdespesas/filtros-externos-megasoft.cy.js"
  */
 
 // Configuração da rota e identificação usadas nas mensagens do spec.

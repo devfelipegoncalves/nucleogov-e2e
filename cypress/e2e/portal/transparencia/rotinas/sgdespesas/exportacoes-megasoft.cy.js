@@ -7,7 +7,7 @@
  * para execução e identificação no Cypress.
  *
  * Execução:
- * npm run cy:run -- --spec "cypress/e2e/portal/transparencia/megasoft/sgdespesas/exportacoes.cy.js"
+ * npm run cy:run -- --spec "cypress/e2e/portal/transparencia/rotinas/sgdespesas/exportacoes-megasoft.cy.js"
  */
 
 // O spec comum lê estas variáveis quando é carregado e passa a operar no SG.
@@ -15,4 +15,4 @@ Cypress.env("DESPESAS_PATH", "/cidadao/transparencia/sgdespesas");
 Cypress.env("DESPESAS_NOME", "sgdespesas");
 
 // Reutiliza o fluxo já validado sem duplicar os helpers de exportação.
-require("../mgdespesas/exportacoes.cy.js");
+require("../../megasoft/mgdespesas/exportacoes.cy.js");

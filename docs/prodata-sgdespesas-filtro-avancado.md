@@ -2,13 +2,13 @@
 
 Script relacionado:
 
-`cypress/e2e/portal/transparencia/prodata/sgdespesas/filtro-avancado.cy.js`
+`cypress/e2e/portal/transparencia/rotinas/sgdespesas/filtro-avancado-prodata.cy.js`
 
 ## Execução
 
 ```bash
-npm run cy:open -- --e2e --spec "cypress/e2e/portal/transparencia/prodata/sgdespesas/filtro-avancado.cy.js"
-npm run cy:run -- --spec "cypress/e2e/portal/transparencia/prodata/sgdespesas/filtro-avancado.cy.js"
+npm run cy:open -- --e2e --spec "cypress/e2e/portal/transparencia/rotinas/sgdespesas/filtro-avancado-prodata.cy.js"
+npm run cy:run -- --spec "cypress/e2e/portal/transparencia/rotinas/sgdespesas/filtro-avancado-prodata.cy.js"
 ```
 
 ## Objetivo

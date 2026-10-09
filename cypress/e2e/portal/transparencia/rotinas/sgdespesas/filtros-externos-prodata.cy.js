@@ -6,10 +6,10 @@
  * listagem carregada, aplica um filtro e valida o resultado exibido.
  *
  * Execução interativa:
- * npm run cy:open -- --e2e --spec "cypress/e2e/portal/transparencia/prodata/sgdespesas/filtros-externos.cy.js"
+ * npm run cy:open -- --e2e --spec "cypress/e2e/portal/transparencia/rotinas/sgdespesas/filtros-externos-prodata.cy.js"
  *
  * Execução headless:
- * npm run cy:run -- --spec "cypress/e2e/portal/transparencia/prodata/sgdespesas/filtros-externos.cy.js"
+ * npm run cy:run -- --spec "cypress/e2e/portal/transparencia/rotinas/sgdespesas/filtros-externos-prodata.cy.js"
  */
 
 // Identificação da página usada em todas as visitas e mensagens de diagnóstico.

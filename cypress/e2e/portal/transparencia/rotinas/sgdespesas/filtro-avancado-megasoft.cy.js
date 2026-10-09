@@ -7,7 +7,7 @@
  * equivalentes aos testes Prodata.
  *
  * Execução:
- * npm run cy:run -- --spec "cypress/e2e/portal/transparencia/megasoft/sgdespesas/filtro-avancado.cy.js"
+ * npm run cy:run -- --spec "cypress/e2e/portal/transparencia/rotinas/sgdespesas/filtro-avancado-megasoft.cy.js"
  */
 
 // Configuração da rota e identificação usadas nas mensagens do spec.

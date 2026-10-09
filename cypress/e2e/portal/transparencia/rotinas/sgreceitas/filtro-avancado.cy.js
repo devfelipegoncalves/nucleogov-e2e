@@ -185,9 +185,7 @@ function obterMesDoPrimeiroRegistro() {
       const texto = obterValorDoCampo($campo);
       const mes = obterNumeroMes(texto);
 
-      cy.log(
-        `[${SG_RECEITAS_NOME}][mês inicial] ${MESES[mes - 1]}`,
-      );
+      cy.log(`[${SG_RECEITAS_NOME}][mês inicial] ${MESES[mes - 1]}`);
       return cy.wrap(mes, { log: false });
     })
     .then((mes) => {
@@ -258,9 +256,10 @@ function obterCategoriaEconomicaDoPrimeiroRegistro() {
     .then(($campo) => {
       const categoria = obterValorDoCampo($campo);
 
-      expect(categoria, "categoria econômica disponível no detalhamento").to.not.equal(
-        "",
-      );
+      expect(
+        categoria,
+        "categoria econômica disponível no detalhamento",
+      ).to.not.equal("");
       cy.log(`[${SG_RECEITAS_NOME}][categoria econômica inicial] ${categoria}`);
       return cy.wrap(categoria, { log: false });
     })
@@ -363,8 +362,10 @@ function obterIntervaloValorPrevistoDaListagem() {
       })
       .filter(({ numero }) => Number.isFinite(numero));
 
-    expect(valores.length, "Valores Previstos disponíveis na listagem").to.be
-      .greaterThan(0);
+    expect(
+      valores.length,
+      "Valores Previstos disponíveis na listagem",
+    ).to.be.greaterThan(0);
 
     const valoresOrdenados = [...valores].sort(
       (valorA, valorB) => valorA.numero - valorB.numero,
@@ -429,10 +430,8 @@ function obterDesdobramentoDoPrimeiroRegistro() {
           return opcoes.some((opcao) => opcao.codigo === desdobramento);
         });
 
-        expect(
-          registro,
-          "registro com Desdobramento disponível no filtro",
-        ).to.exist;
+        expect(registro, "registro com Desdobramento disponível no filtro").to
+          .exist;
 
         return cy
           .wrap(registro)
@@ -442,9 +441,7 @@ function obterDesdobramentoDoPrimeiroRegistro() {
           .click({ force: true });
       });
     })
-    .then(() =>
-      cy.get("#nat_desdobramento", { timeout: LISTAGEM_TIMEOUT }),
-    )
+    .then(() => cy.get("#nat_desdobramento", { timeout: LISTAGEM_TIMEOUT }))
     .should("be.visible")
     .then(($campo) => {
       const desdobramento = obterValorDoCampo($campo);
@@ -458,7 +455,9 @@ function obterDesdobramentoDoPrimeiroRegistro() {
     })
     .then((desdobramento) => {
       cy.visitPortal(SG_RECEITAS_PATH);
-      return aguardarListagem().then(() => cy.wrap(desdobramento, { log: false }));
+      return aguardarListagem().then(() =>
+        cy.wrap(desdobramento, { log: false }),
+      );
     });
 }
 
@@ -534,14 +533,12 @@ function selecionarMesNoFiltroAvancado(mesEsperado) {
                 normalizarParaComparacao(nomeMes),
           );
 
-          expect(opcao, `mês ${nomeMes} disponível no filtro avançado`).to.exist;
+          expect(opcao, `mês ${nomeMes} disponível no filtro avançado`).to
+            .exist;
           cy.wrap(opcao).click({ force: true });
           cy.get("#select_mes .selected").should("have.attr", "id", codigoMes);
 
-          return cy.wrap(
-            { numero: mes, nome: nomeMes },
-            { log: false },
-          );
+          return cy.wrap({ numero: mes, nome: nomeMes }, { log: false });
         }),
     );
 }
@@ -597,7 +594,8 @@ function selecionarAnoNoFiltroAvancado(anoEsperado) {
         .should("have.length.at.least", 1)
         .then(($opcoes) => {
           const opcao = Array.from($opcoes).find(
-            (elemento) => elemento.getAttribute("href")?.replace(/^#/, "") === ano,
+            (elemento) =>
+              elemento.getAttribute("href")?.replace(/^#/, "") === ano,
           );
 
           expect(opcao, `ano ${ano} disponível no filtro avançado`).to.exist;
@@ -657,7 +655,11 @@ function selecionarOrgaoNoFiltroAvancado(orgaoEsperado) {
             const texto = normalizarTexto(opcao.textContent);
             const codigo = opcao.getAttribute("href")?.replace(/^#/, "") || "";
             cy.wrap(opcao).click({ force: true });
-            cy.get("#select_orgao_advanced .selected").should("have.attr", "id", codigo);
+            cy.get("#select_orgao_advanced .selected").should(
+              "have.attr",
+              "id",
+              codigo,
+            );
 
             return cy.wrap({ texto, codigo }, { log: false });
           }),
@@ -689,7 +691,11 @@ function selecionarOutroOrgaoNoFiltroAvancado(orgaoAtual) {
           const texto = normalizarTexto(opcao.textContent);
           const codigo = opcao.getAttribute("href")?.replace(/^#/, "") || "";
           cy.wrap(opcao).click({ force: true });
-          cy.get("#select_orgao_advanced .selected").should("have.attr", "id", codigo);
+          cy.get("#select_orgao_advanced .selected").should(
+            "have.attr",
+            "id",
+            codigo,
+          );
 
           return cy.wrap({ texto, codigo }, { log: false });
         }),
@@ -771,7 +777,10 @@ function tiposCorrespondem(tipoEsperado, tipoEncontrado) {
 }
 
 // Compara o desdobramento aceitando diferenças de código e formatação.
-function desdobramentosCorrespondem(desdobramentoEsperado, desdobramentoEncontrado) {
+function desdobramentosCorrespondem(
+  desdobramentoEsperado,
+  desdobramentoEncontrado,
+) {
   const esperado = normalizarParaComparacao(desdobramentoEsperado);
   const encontrado = normalizarParaComparacao(desdobramentoEncontrado);
   const esperadoSemCodigo = esperado.replace(/^[\d.]+\s*[-.)]\s*/, "");
@@ -1156,7 +1165,11 @@ function selecionarOutroAnoNoFiltroAvancado(anoAtual) {
           const ano = Number(opcao.getAttribute("href").replace(/^#/, ""));
 
           cy.wrap(opcao).click({ force: true });
-          cy.get("#select_ano .selected").should("have.attr", "id", String(ano));
+          cy.get("#select_ano .selected").should(
+            "have.attr",
+            "id",
+            String(ano),
+          );
           return cy.wrap(ano, { log: false });
         }),
     );
@@ -1288,9 +1301,7 @@ function validarDescricaoDoResultado(descricao) {
         }),
     )
     .then(() => {
-      cy.log(
-        `[${SG_RECEITAS_NOME}][filtro avançado][descrição] ${descricao}`,
-      );
+      cy.log(`[${SG_RECEITAS_NOME}][filtro avançado][descrição] ${descricao}`);
       cy.visitPortal(SG_RECEITAS_PATH);
       return aguardarListagem();
     });
@@ -1334,7 +1345,9 @@ function validarOrigemDoResultado(origemEsperada) {
         origensCorrespondem(origemEsperada, origemRetornada),
         `origem retornada "${origemRetornada}" compatível com "${origemEsperada}"`,
       ).to.equal(true);
-      cy.log(`[${SG_RECEITAS_NOME}][filtro avançado][origem] ${origemRetornada}`);
+      cy.log(
+        `[${SG_RECEITAS_NOME}][filtro avançado][origem] ${origemRetornada}`,
+      );
       cy.visitPortal(SG_RECEITAS_PATH);
       return aguardarListagem();
     });
@@ -1355,7 +1368,9 @@ function validarEspecieDoResultado(especieEsperada) {
         especiesCorrespondem(especieEsperada, especieRetornada),
         `espécie retornada "${especieRetornada}" compatível com "${especieEsperada}"`,
       ).to.equal(true);
-      cy.log(`[${SG_RECEITAS_NOME}][filtro avançado][espécie] ${especieRetornada}`);
+      cy.log(
+        `[${SG_RECEITAS_NOME}][filtro avançado][espécie] ${especieRetornada}`,
+      );
       cy.visitPortal(SG_RECEITAS_PATH);
       return aguardarListagem();
     });
@@ -1430,8 +1445,10 @@ function obterIntervaloValorArrecadadoDaListagem() {
       })
       .filter(({ numero }) => Number.isFinite(numero));
 
-    expect(valores.length, "Valores Arrecadados disponíveis na listagem").to.be
-      .greaterThan(1);
+    expect(
+      valores.length,
+      "Valores Arrecadados disponíveis na listagem",
+    ).to.be.greaterThan(1);
 
     const valoresOrdenados = [...valores].sort(
       (valorA, valorB) => valorA.numero - valorB.numero,
@@ -1439,7 +1456,9 @@ function obterIntervaloValorArrecadadoDaListagem() {
     const minimo = valoresOrdenados[0];
     const maximo = valoresOrdenados[valoresOrdenados.length - 1];
 
-    expect(minimo.numero, "menor Valor Arrecadado").to.be.at.most(maximo.numero);
+    expect(minimo.numero, "menor Valor Arrecadado").to.be.at.most(
+      maximo.numero,
+    );
     cy.log(
       `[${SG_RECEITAS_NOME}][Valor Arrecadado] intervalo ${minimo.texto} a ${maximo.texto}`,
     );
@@ -1461,7 +1480,10 @@ function obterIntervaloValorArrecadadoDaListagem() {
 }
 
 // Preenche os valores inicial e final de Arrecadação no filtro avançado.
-function selecionarIntervaloValorArrecadadoNoFiltroAvancado({ minimo, maximo }) {
+function selecionarIntervaloValorArrecadadoNoFiltroAvancado({
+  minimo,
+  maximo,
+}) {
   return abrirFiltroAvancado()
     .then(() =>
       cy
@@ -1585,20 +1607,23 @@ function validarDesdobramentoDoResultado(desdobramentoEsperado) {
 // Valida que os períodos exibidos permanecem dentro do intervalo pesquisado.
 function validarDatasDoResultado({ inicio, fim }) {
   return aguardarListagem().then(($linhas) => {
-    expect($linhas.length, "registros retornados pelo filtro de período").to.be.greaterThan(
-      0,
-    );
+    expect(
+      $linhas.length,
+      "registros retornados pelo filtro de período",
+    ).to.be.greaterThan(0);
 
     Array.from($linhas).forEach((linha) => {
       const periodo = normalizarTexto(Cypress.$(linha).find(".col8").text());
       const dataDoRegistro = converterPeriodoDaListagem(periodo);
 
-      expect(dataDoRegistro, `${periodo} dentro do intervalo filtrado`).to.be.at.least(
-        inicio,
-      );
-      expect(dataDoRegistro, `${periodo} dentro do intervalo filtrado`).to.be.at.most(
-        fim,
-      );
+      expect(
+        dataDoRegistro,
+        `${periodo} dentro do intervalo filtrado`,
+      ).to.be.at.least(inicio);
+      expect(
+        dataDoRegistro,
+        `${periodo} dentro do intervalo filtrado`,
+      ).to.be.at.most(fim);
     });
 
     cy.log(
@@ -1621,7 +1646,9 @@ describe(`Portal: ${SG_RECEITAS_NOME} - filtro avançado`, () => {
         .then(() => pesquisarFiltroAvancado())
         .then(() => validarMesDoResultado(mesInicial, "mês original"))
         .then(() => selecionarOutroMesNoFiltroAvancado(mesInicial))
-        .then((mesSelecionado) => pesquisarFiltroAvancado().then(() => mesSelecionado))
+        .then((mesSelecionado) =>
+          pesquisarFiltroAvancado().then(() => mesSelecionado),
+        )
         .then((mesSelecionado) =>
           validarMesDoResultado(mesSelecionado.numero, "outro mês"),
         );
@@ -1657,9 +1684,7 @@ describe(`Portal: ${SG_RECEITAS_NOME} - filtro avançado`, () => {
         ),
       )
       .then((orgaoAtual) => selecionarOutroOrgaoNoFiltroAvancado(orgaoAtual))
-      .then((outroOrgao) =>
-        pesquisarFiltroAvancado().then(() => outroOrgao),
-      )
+      .then((outroOrgao) => pesquisarFiltroAvancado().then(() => outroOrgao))
       .then((outroOrgao) => validarOrgaoDoResultado(outroOrgao, "outro órgão"));
   });
 
@@ -1667,16 +1692,16 @@ describe(`Portal: ${SG_RECEITAS_NOME} - filtro avançado`, () => {
   it("filtra por descrição no filtro avançado e valida o detalhamento", () => {
     obterDescricaoDoPrimeiroRegistro()
       .then((descricao) => selecionarDescricaoNoFiltroAvancado(descricao))
-      .then((descricao) =>
-        pesquisarFiltroAvancado().then(() => descricao),
-      )
+      .then((descricao) => pesquisarFiltroAvancado().then(() => descricao))
       .then((descricao) => validarDescricaoDoResultado(descricao));
   });
 
   // Usa a menor e a maior data dos registros para validar o intervalo.
   it("filtra por data inicial e data final e valida a listagem", () => {
     obterDatasInicialEFinalDaListagem()
-      .then((periodo) => selecionarDatasNoFiltroAvancado(periodo).then(() => periodo))
+      .then((periodo) =>
+        selecionarDatasNoFiltroAvancado(periodo).then(() => periodo),
+      )
       .then((periodo) => pesquisarFiltroAvancado().then(() => periodo))
       .then((periodo) => validarDatasDoResultado(periodo));
   });
@@ -1800,7 +1825,9 @@ describe(`Portal: ${SG_RECEITAS_NOME} - filtro avançado`, () => {
         selecionarIntervaloValorArrecadadoNoFiltroAvancado(intervalo),
       )
       .then((intervalo) => pesquisarFiltroAvancado().then(() => intervalo))
-      .then((intervalo) => validarIntervaloValorArrecadadoDoResultado(intervalo));
+      .then((intervalo) =>
+        validarIntervaloValorArrecadadoDoResultado(intervalo),
+      );
   });
 
   // Impede a pesquisa quando o Valor Arrecadado inicial é maior que o final.
@@ -1873,9 +1900,9 @@ describe(`Portal: ${SG_RECEITAS_NOME} - filtro avançado`, () => {
         })),
       )
       .then(({ intervalo, codigoPrimeiroRegistro }) =>
-        selecionarIntervaloValorPrevistoInvalidoNoFiltroAvancado(intervalo).then(
-          (valores) => ({ valores, codigoPrimeiroRegistro }),
-        ),
+        selecionarIntervaloValorPrevistoInvalidoNoFiltroAvancado(
+          intervalo,
+        ).then((valores) => ({ valores, codigoPrimeiroRegistro })),
       )
       .then(({ valores, codigoPrimeiroRegistro }) => {
         cy.get("#btnBuscar", { timeout: LISTAGEM_TIMEOUT })

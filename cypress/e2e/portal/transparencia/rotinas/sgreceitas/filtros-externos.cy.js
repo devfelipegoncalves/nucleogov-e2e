@@ -10,8 +10,7 @@ const SG_RECEITAS_PATH =
 const SG_RECEITAS_NOME = Cypress.env("RECEITAS_NOME") || "sgreceitas";
 const LISTAGEM_TIMEOUT = 30000;
 const SELETOR_CALENDARIO = "#filtro_periodo .filtro_intervalo";
-const SELETOR_BUSCA_TEXTO =
-  ".filtro .containerbusca.buscatxt input#search";
+const SELETOR_BUSCA_TEXTO = ".filtro .containerbusca.buscatxt input#search";
 const MESES = [
   "janeiro",
   "fevereiro",
@@ -166,7 +165,9 @@ function aguardarRetornoDoFiltro() {
     .then(() =>
       cy.get(".cont_dados", { timeout: LISTAGEM_TIMEOUT }).should("be.visible"),
     )
-    .then(() => cy.get(".tb-load", { timeout: LISTAGEM_TIMEOUT }).should("not.exist"));
+    .then(() =>
+      cy.get(".tb-load", { timeout: LISTAGEM_TIMEOUT }).should("not.exist"),
+    );
 }
 
 // Seleciona uma opção do filtro COVID-19, aceitando diferenças de acentuação.
@@ -182,14 +183,14 @@ function selecionarOpcaoCovid(opcaoEsperada) {
         })
         .should("have.length.at.least", 1)
         .then(($opcoes) => {
-          const opcao = Array.from($opcoes).find(
-            (elemento) =>
-              normalizarParaComparacao(elemento.textContent).endsWith(
-                normalizarParaComparacao(opcaoEsperada),
-              ),
+          const opcao = Array.from($opcoes).find((elemento) =>
+            normalizarParaComparacao(elemento.textContent).endsWith(
+              normalizarParaComparacao(opcaoEsperada),
+            ),
           );
 
-          expect(opcao, `opção COVID-19 "${opcaoEsperada}" disponível`).to.exist;
+          expect(opcao, `opção COVID-19 "${opcaoEsperada}" disponível`).to
+            .exist;
 
           const textoSelecionado = normalizarTexto(opcao.textContent);
           cy.wrap(opcao).click({ force: true });
@@ -233,7 +234,11 @@ function validarResultadoCovid(opcao, exigirDados) {
     Cypress.log({
       name: linhas.length > 0 ? "RESULTADO" : "ALERTA",
       message: mensagem,
-      consoleProps: () => ({ filtro: "COVID-19", opcao, registros: linhas.length }),
+      consoleProps: () => ({
+        filtro: "COVID-19",
+        opcao,
+        registros: linhas.length,
+      }),
     });
     cy.log(mensagem);
 
@@ -366,8 +371,9 @@ function obterOrgaoDoPrimeiroRegistro() {
 function selecionarOrgaoNoFiltro(orgaoEsperado) {
   const termoPesquisa = obterNomeOrgaoParaPesquisa(orgaoEsperado);
 
-  return cy.get("#select_orgao", { timeout: LISTAGEM_TIMEOUT }).then(
-    ($container) => {
+  return cy
+    .get("#select_orgao", { timeout: LISTAGEM_TIMEOUT })
+    .then(($container) => {
       cy.wrap($container).find(".selected").click({ force: true });
       cy.wrap($container)
         .find("input#search:visible")
@@ -394,10 +400,8 @@ function selecionarOrgaoNoFiltro(orgaoEsperado) {
               orgaosCorrespondem(orgaoEsperado, elemento.textContent),
             );
 
-          expect(
-            opcao,
-            `órgão "${orgaoEsperado}" disponível no filtro externo`,
-          ).to.exist;
+          expect(opcao, `órgão "${orgaoEsperado}" disponível no filtro externo`)
+            .to.exist;
 
           const textoSelecionado = normalizarTexto(opcao.textContent);
           const codigoSelecionado =
@@ -416,8 +420,7 @@ function selecionarOrgaoNoFiltro(orgaoEsperado) {
             { log: false },
           );
         });
-    },
-  );
+    });
 }
 
 // Escolhe uma opção diferente da primeira e retorna o órgão selecionado.
@@ -610,7 +613,7 @@ describe(`Portal: ${SG_RECEITAS_NOME} - filtros externos`, () => {
         .then(() => validarPeriodoDosResultados(outroMes, "outro mês"))
         .then(() => selecionarMesEAno(outroAno))
         .then(() => validarPeriodoDosResultados(outroAno, "outro ano"));
-      });
+    });
   });
 
   // Valida que as opções SIM e NÃO retornam registros na listagem.
@@ -624,8 +627,8 @@ describe(`Portal: ${SG_RECEITAS_NOME} - filtros externos`, () => {
   // Pesquisa pela descrição e depois pelo código de uma receita real.
   it("busca pela descrição e pelo código da receita", () => {
     obterDadosParaBuscaTextual().then(({ descricao, codigo }) =>
-      pesquisarTextoEValidar(descricao, ".colDescricao", "descrição").then(
-        () => pesquisarTextoEValidar(codigo, ".colCodigo", "código"),
+      pesquisarTextoEValidar(descricao, ".colDescricao", "descrição").then(() =>
+        pesquisarTextoEValidar(codigo, ".colCodigo", "código"),
       ),
     );
   });

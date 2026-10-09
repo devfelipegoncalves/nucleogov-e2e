@@ -13,10 +13,10 @@
  * abrir o popup e não durante a digitação do autocomplete.
  *
  * Execução interativa:
- * npm run cy:open -- --e2e --spec "cypress/e2e/portal/transparencia/prodata/sgdespesas/filtro-avancado.cy.js"
+ * npm run cy:open -- --e2e --spec "cypress/e2e/portal/transparencia/rotinas/sgdespesas/filtro-avancado-prodata.cy.js"
  *
  * Execução headless:
- * npm run cy:run -- --spec "cypress/e2e/portal/transparencia/prodata/sgdespesas/filtro-avancado.cy.js"
+ * npm run cy:run -- --spec "cypress/e2e/portal/transparencia/rotinas/sgdespesas/filtro-avancado-prodata.cy.js"
  */
 
 // Configurações comuns do módulo e limite das tentativas de recuperação.

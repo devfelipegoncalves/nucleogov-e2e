@@ -45,9 +45,7 @@ function converterPeriodoDaListagem(texto) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
   const mes = MESES.findIndex((nome) =>
-    valor.includes(
-      nome.normalize("NFD").replace(/[\u0300-\u036f]/g, ""),
-    ),
+    valor.includes(nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "")),
   );
   const ano = Number(valor.match(/\b20\d{2}\b/)?.[0]);
 
@@ -171,14 +169,12 @@ function obterCamposDosResultadosFiltrados() {
     const periodoReferencia = periodos[0];
 
     periodos.forEach((periodo, indice) => {
-      expect(
-        periodo.getFullYear(),
-        `ano do resultado ${indice + 1}`,
-      ).to.equal(periodoReferencia.getFullYear());
-      expect(
-        periodo.getMonth(),
-        `mês do resultado ${indice + 1}`,
-      ).to.equal(periodoReferencia.getMonth());
+      expect(periodo.getFullYear(), `ano do resultado ${indice + 1}`).to.equal(
+        periodoReferencia.getFullYear(),
+      );
+      expect(periodo.getMonth(), `mês do resultado ${indice + 1}`).to.equal(
+        periodoReferencia.getMonth(),
+      );
     });
 
     const campos = linhas.flatMap((linha) =>
@@ -190,9 +186,10 @@ function obterCamposDosResultadosFiltrados() {
         .filter(({ value }) => value),
     );
 
-    expect(campos, "campos dos resultados filtrados").to.have.length.greaterThan(
-      0,
-    );
+    expect(
+      campos,
+      "campos dos resultados filtrados",
+    ).to.have.length.greaterThan(0);
     cy.log(
       `[${SG_RECEITAS_NOME}][exportação] ${linhas.length} resultado(s) verificado(s) no período filtrado`,
     );
@@ -214,8 +211,10 @@ function consolidarCamposDosResultados(resultados) {
     }
   });
 
-  expect(camposConsolidados, "campos consolidados dos resultados").to.have
-    .length.greaterThan(0);
+  expect(
+    camposConsolidados,
+    "campos consolidados dos resultados",
+  ).to.have.length.greaterThan(0);
   return camposConsolidados;
 }
 
@@ -258,10 +257,14 @@ function validarFormatosDisponiveis(opcoes) {
   const formatosDisponiveis = opcoes.map(obterFormato);
   const extensoesEsperadas = FORMATOS_ESPERADOS.map(({ extensao }) => extensao);
 
-  expect(formatosDisponiveis, "formatos de exportação disponíveis").to.have
-    .members(extensoesEsperadas);
-  expect(formatosDisponiveis, "quantidade de formatos de exportação").to.have
-    .length(extensoesEsperadas.length);
+  expect(
+    formatosDisponiveis,
+    "formatos de exportação disponíveis",
+  ).to.have.members(extensoesEsperadas);
+  expect(
+    formatosDisponiveis,
+    "quantidade de formatos de exportação",
+  ).to.have.length(extensoesEsperadas.length);
 }
 
 // Ajusta diferenças esperadas entre detalhe e arquivo exportado.
@@ -320,42 +323,47 @@ function validarArquivoExportado(formato, resultados) {
     },
     { timeout: LISTAGEM_TIMEOUT * 5 },
   ).then(({ tamanho, camposComparados, camposAusentes, fileName }) => {
-      expect(
-        tamanho,
-        `tamanho do arquivo ${formato} exportado`,
-      ).to.be.greaterThan(0);
-      expect(camposComparados, `campos comparados no arquivo ${formato}`).to.have
-        .length.greaterThan(0);
-      expect(
-        camposAusentes.join(", "),
-        `campos ausentes no arquivo ${fileName || nomes.join(" ou ")}`,
-      ).to.equal("");
+    expect(
+      tamanho,
+      `tamanho do arquivo ${formato} exportado`,
+    ).to.be.greaterThan(0);
+    expect(
+      camposComparados,
+      `campos comparados no arquivo ${formato}`,
+    ).to.have.length.greaterThan(0);
+    expect(
+      camposAusentes.join(", "),
+      `campos ausentes no arquivo ${fileName || nomes.join(" ou ")}`,
+    ).to.equal("");
 
-      camposComparados.forEach(({ label, value, regra, encontrado }) => {
-        cy.log(
-          `[${formato.toUpperCase()}] ${label}: "${value}" → ${
-            encontrado ? "ENCONTRADO" : "AUSENTE"
-          }`,
-        );
-        Cypress.log({
-          name: `COMPARAÇÃO ${formato.toUpperCase()}`,
-          message: `${label}: "${value}" (${regra})`,
-          consoleProps: () => ({
-            arquivo: fileName,
-            campo: label,
-            valorDoDetalhamento: value,
-            encontradoNoArquivo: encontrado,
-            regra,
-          }),
-        });
+    camposComparados.forEach(({ label, value, regra, encontrado }) => {
+      cy.log(
+        `[${formato.toUpperCase()}] ${label}: "${value}" → ${
+          encontrado ? "ENCONTRADO" : "AUSENTE"
+        }`,
+      );
+      Cypress.log({
+        name: `COMPARAÇÃO ${formato.toUpperCase()}`,
+        message: `${label}: "${value}" (${regra})`,
+        consoleProps: () => ({
+          arquivo: fileName,
+          campo: label,
+          valorDoDetalhamento: value,
+          encontradoNoArquivo: encontrado,
+          regra,
+        }),
       });
+    });
   });
 }
 
 // Remove downloads antigos, inicia a exportação e valida o arquivo gerado.
 function exportarOpcao(texto, formato, resultados) {
   const nomes = nomesDosArquivos(formato);
-  const nomesParaLimpeza = nomes.flatMap((nome) => [nome, `${nome}.crdownload`]);
+  const nomesParaLimpeza = nomes.flatMap((nome) => [
+    nome,
+    `${nome}.crdownload`,
+  ]);
 
   cy.task("removeDownloadedFiles", { fileNames: nomesParaLimpeza }).then(() => {
     cy.get("#exportar .btt_options a:visible")
@@ -390,15 +398,12 @@ describe(`Portal Prodata: ${SG_RECEITAS_NOME} - exportações`, () => {
   // Cada formato fica em um teste independente para facilitar o diagnóstico.
   FORMATOS_ESPERADOS.forEach(({ nome, extensao }) => {
     it(`exporta ${nome} e compara os campos de vários resultados filtrados`, () => {
-      expect(resultadosCompartilhados, "resultados compartilhados").to
-        .exist;
+      expect(resultadosCompartilhados, "resultados compartilhados").to.exist;
 
       obterOpcoesDeExportacao().then((opcoes) => {
         validarFormatosDisponiveis(opcoes);
 
-        const opcao = opcoes.find(
-          (texto) => obterFormato(texto) === extensao,
-        );
+        const opcao = opcoes.find((texto) => obterFormato(texto) === extensao);
         expect(opcao, `opção ${nome} disponível para exportação`).to.exist;
 
         exportarOpcao(opcao, extensao, resultadosCompartilhados);

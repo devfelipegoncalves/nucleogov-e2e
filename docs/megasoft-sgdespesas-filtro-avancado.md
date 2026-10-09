@@ -2,13 +2,13 @@
 
 Script relacionado:
 
-`cypress/e2e/portal/transparencia/megasoft/sgdespesas/filtro-avancado.cy.js`
+`cypress/e2e/portal/transparencia/rotinas/sgdespesas/filtro-avancado-megasoft.cy.js`
 
 ## Execução
 
 ```bash
-npm run cy:open -- --e2e --spec "cypress/e2e/portal/transparencia/megasoft/sgdespesas/filtro-avancado.cy.js"
-npm run cy:run -- --spec "cypress/e2e/portal/transparencia/megasoft/sgdespesas/filtro-avancado.cy.js"
+npm run cy:open -- --e2e --spec "cypress/e2e/portal/transparencia/rotinas/sgdespesas/filtro-avancado-megasoft.cy.js"
+npm run cy:run -- --spec "cypress/e2e/portal/transparencia/rotinas/sgdespesas/filtro-avancado-megasoft.cy.js"
 ```
 
 ## Objetivo e fluxo

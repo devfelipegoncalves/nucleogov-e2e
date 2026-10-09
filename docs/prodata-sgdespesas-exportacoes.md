@@ -11,7 +11,7 @@ estrutura deste projeto.
 Neste teste existem dois arquivos diferentes:
 
 1. O arquivo JavaScript do teste:
-   `cypress/e2e/portal/transparencia/prodata/sgdespesas/exportacoes.cy.js`.
+   `cypress/e2e/portal/transparencia/rotinas/sgdespesas/exportacoes-prodata.cy.js`.
 2. O arquivo criado pelo download, por exemplo:
    `cypress/artifacts/downloads/relatório-despesas.html`.
 
@@ -39,7 +39,7 @@ abrir listagem
 O spec está em:
 
 ```text
-cypress/e2e/portal/transparencia/prodata/sgdespesas/exportacoes.cy.js
+cypress/e2e/portal/transparencia/rotinas/sgdespesas/exportacoes-prodata.cy.js
 ```
 
 Ele controla o navegador: visita a página, clica na despesa, abre o menu de
@@ -294,13 +294,13 @@ O domínio deve estar definido por `CYPRESS_BASE_URL` no `.env`.
 Execute somente este spec com:
 
 ```bash
-npm run cy:run -- --spec "cypress/e2e/portal/transparencia/prodata/sgdespesas/exportacoes.cy.js"
+npm run cy:run -- --spec "cypress/e2e/portal/transparencia/rotinas/sgdespesas/exportacoes-prodata.cy.js"
 ```
 
 Para abrir o Cypress em modo interativo:
 
 ```bash
-npm run cy:open -- --e2e --spec "cypress/e2e/portal/transparencia/prodata/sgdespesas/exportacoes.cy.js"
+npm run cy:open -- --e2e --spec "cypress/e2e/portal/transparencia/rotinas/sgdespesas/exportacoes-prodata.cy.js"
 ```
 
 Os seis cenários usam a mesma estratégia, mas cada um baixa e valida uma

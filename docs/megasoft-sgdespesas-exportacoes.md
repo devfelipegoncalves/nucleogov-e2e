@@ -7,7 +7,7 @@ Esta documentação descreve a cobertura de exportação de arquivos do módulo 
 Spec executável:
 
 ```text
-cypress/e2e/portal/transparencia/megasoft/sgdespesas/exportacoes.cy.js
+cypress/e2e/portal/transparencia/rotinas/sgdespesas/exportacoes-megasoft.cy.js
 ```
 
 O spec de SG configura a rota `/cidadao/transparencia/sgdespesas` e reutiliza o fluxo comum de exportações de `mgdespesas`. A implementação compartilhada está em:
@@ -62,13 +62,13 @@ As propriedades adicionais ficam disponíveis ao expandir `consoleProps` no pain
 Executar somente as exportações de SGDespesas:
 
 ```bash
-npm run cy:run -- --spec 'cypress/e2e/portal/transparencia/megasoft/sgdespesas/exportacoes.cy.js'
+npm run cy:run -- --spec 'cypress/e2e/portal/transparencia/rotinas/sgdespesas/exportacoes-megasoft.cy.js'
 ```
 
 Executar de forma interativa:
 
 ```bash
-npm run cy:open -- --e2e --spec 'cypress/e2e/portal/transparencia/megasoft/sgdespesas/exportacoes.cy.js'
+npm run cy:open -- --e2e --spec 'cypress/e2e/portal/transparencia/rotinas/sgdespesas/exportacoes-megasoft.cy.js'
 ```
 
 O domínio é definido por `CYPRESS_BASE_URL` no `.env` ou no ambiente do comando. Os arquivos são baixados em `cypress/artifacts/downloads/`.

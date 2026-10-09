@@ -1,5 +1,6 @@
 const { buildManifestacaoOuvidoria } = require("./helpers/ouvidoria");
 const { buildSolicitacaoSic } = require("./helpers/sic");
+const { identificarImplementacaoPortal } = require("./helpers/portal");
 
 function assertAssetsLoaded() {
   const timeout = 60000;
@@ -144,6 +145,13 @@ Cypress.Commands.add("loginAdmin", (overrides = {}) => {
 
 Cypress.Commands.add("visitPortal", (path = "/") => {
   cy.visitPage(path);
+  return identificarImplementacaoPortal();
+});
+
+// Permite identificar novamente a implementação sem recarregar a página, por
+// exemplo depois de uma navegação interna ou ao validar uma rota redirecionada.
+Cypress.Commands.add("identificarImplementacaoPortal", () => {
+  return identificarImplementacaoPortal();
 });
 
 // A listagem administrativa aceita o protocolo na querystring e abre o popup da manifestação.
