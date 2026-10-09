@@ -15,7 +15,7 @@ const DESPESAS_PATH =
 const DESPESAS_NOME = Cypress.env("DESPESAS_NOME") || "cntdespesas";
 
 const SELETOR_LINHAS_VALIDAS = ".cont_dados .tb tr[id]";
-const SELETOR_SELECT_ORGAO = ".containerorgao > .select > #\\31 0";
+const SELETOR_SELECT_ORGAO = ".containerorgao > .select > .selected";
 const SELETOR_CONTAINER_SELECT_ORGAO = ".containerorgao > .select";
 const SELETOR_OPCOES_ORGAO = ".containerorgao > .select > .options";
 const SELETOR_SELECT_COVID = "#search_coronavirus .select > .selected";

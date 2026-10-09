@@ -1,6 +1,7 @@
 const DESPESAS_PATH =
   Cypress.env("DESPESAS_PATH") || "/cidadao/transparencia/mgdespesas";
 const DESPESAS_NOME = Cypress.env("DESPESAS_NOME") || "mgdespesas";
+const LISTAGEM_TIMEOUT = 60000;
 
 // Os specs de MG e SG compartilham o mesmo fluxo, mas podem sobrescrever a
 // rota e o nome do sistema por meio de Cypress.env quando necessário.
@@ -41,8 +42,19 @@ function obterTermosSignificativos(texto) {
 // Aguarda a listagem inicial e garante que exista pelo menos um empenho para
 // servir de massa de dados para o filtro que será testado.
 function aguardarListagem() {
-  cy.get(".loader", { timeout: 30000 }).should("not.exist");
-  cy.get(".cont_dados", { timeout: 30000 }).should("be.visible");
+  cy.get("body", { timeout: LISTAGEM_TIMEOUT }).should(($body) => {
+    expect(
+      $body.find(".loader:visible").length,
+      "loader visível da listagem",
+    ).to.equal(0);
+  });
+  cy.get(".cont_dados", { timeout: LISTAGEM_TIMEOUT }).should("be.visible");
+  cy.get("body", { timeout: LISTAGEM_TIMEOUT }).should(($body) => {
+    expect(
+      $body.find(".tb-load:visible").length,
+      "loader visível da tabela",
+    ).to.equal(0);
+  });
   cy.get(".cont_dados .tb tr[id]")
     .filter((_, row) => !["not-found-line", "template_row"].includes(row.id))
     .should("have.length.at.least", 1);
@@ -133,9 +145,19 @@ function selecionarOpcao(containerSelector, textoOpcao) {
 // Aguarda apenas o término da requisição disparada por um filtro. Essa versão
 // não exige linhas, pois alguns filtros podem legitimamente retornar vazio.
 function aguardarRetornoDoFiltro() {
-  cy.get(".loader", { timeout: 30000 }).should("not.exist");
-  cy.get(".cont_dados", { timeout: 30000 }).should("be.visible");
-  cy.get(".tb-load", { timeout: 30000 }).should("not.exist");
+  cy.get("body", { timeout: LISTAGEM_TIMEOUT }).should(($body) => {
+    expect(
+      $body.find(".loader:visible").length,
+      "loader visível da listagem",
+    ).to.equal(0);
+  });
+  cy.get(".cont_dados", { timeout: LISTAGEM_TIMEOUT }).should("be.visible");
+  cy.get("body", { timeout: LISTAGEM_TIMEOUT }).should(($body) => {
+    expect(
+      $body.find(".tb-load:visible").length,
+      "loader visível da tabela",
+    ).to.equal(0);
+  });
 }
 
 function validarPeriodoExibido(inicial, final) {

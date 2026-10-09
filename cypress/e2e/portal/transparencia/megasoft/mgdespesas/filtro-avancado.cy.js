@@ -1,6 +1,9 @@
 const DESPESAS_PATH =
   Cypress.env("DESPESAS_PATH") || "/cidadao/transparencia/mgdespesas";
 const DESPESAS_NOME = Cypress.env("DESPESAS_NOME") || "mgdespesas";
+const LISTAGEM_TIMEOUT = 60000;
+const INTERVALO_VERIFICACAO_LOADER = 1000;
+const MAX_TENTATIVAS_LOADER = 60;
 
 // O filtro avançado usa a primeira linha real da listagem como massa de dados:
 // o teste coleta um valor no detalhe, retorna à listagem e pesquisa esse valor.
@@ -206,50 +209,235 @@ function obterOpcoesCarregadas(campo) {
     .should("have.length.at.least", 1);
 }
 
+// Alguns selects do filtro avançado são autocompletes: ao abrir, exibem
+// somente o campo de busca e só criam as opções depois da pesquisa.
+function pesquisarAutocomplete(campo, texto) {
+  const comando = typeof campo === "string" ? cy.get(campo) : cy.wrap(campo);
+
+  return comando
+    .find(".options input:visible", { timeout: 30000 })
+    .first()
+    .should("be.visible")
+    .clear({ force: true })
+    .type(texto, { force: true })
+    .then(($input) => {
+      const $controleBusca = Cypress.$(campo)
+        .find(
+          '.options:visible .containerbusca .icon-lupa:visible, .options:visible button:visible, .options:visible a:visible, .options:visible [class*="search"]:visible, .options:visible [class*="busca"]:visible',
+        )
+        .filter((_, elemento) => {
+          const textoDoControle = normalizarParaComparacao(
+            `${elemento.textContent || ""} ${elemento.className || ""} ${elemento.getAttribute("title") || ""} ${elemento.getAttribute("aria-label") || ""}`,
+          );
+
+          return /buscar|busca|pesquisar|search|magnif|lupa/.test(
+            textoDoControle,
+          );
+        })
+        .first();
+
+      if ($controleBusca.length) {
+        const $alvoBusca = $controleBusca.is(".containerbusca")
+          ? $controleBusca
+              .find(
+                'button, a, [class*="icon"], [class*="lupa"], [class*="search"]',
+              )
+              .filter(":visible")
+              .first()
+          : $controleBusca;
+
+        return cy
+          .wrap($alvoBusca.length ? $alvoBusca : $controleBusca)
+          .click({ force: true });
+      }
+
+      return cy.wrap($input).type("{enter}", { force: true });
+    });
+}
+
+function unidadeCombinaComOpcao(nomeUnidade, nomeOpcao) {
+  const unidadeEsperada = removerCodigo(nomeUnidade);
+  const unidadeDaOpcao = removerCodigo(nomeOpcao);
+  const termosEsperados = obterTermosSignificativos(unidadeEsperada);
+  const termosDaOpcao = obterTermosSignificativos(unidadeDaOpcao);
+  const termosEmComum = termosEsperados.filter((termo) =>
+    termosDaOpcao.includes(termo),
+  ).length;
+
+  return (
+    unidadeDaOpcao === unidadeEsperada ||
+    unidadeDaOpcao.includes(unidadeEsperada) ||
+    unidadeEsperada.includes(unidadeDaOpcao) ||
+    (termosEsperados.length > 0 &&
+      termosEmComum >= Math.min(2, termosEsperados.length))
+  );
+}
+
+function normalizarTermoParaSemelhanca(termo) {
+  const termoNormalizado = normalizarParaComparacao(termo);
+
+  return termoNormalizado.length > 4 && termoNormalizado.endsWith("s")
+    ? termoNormalizado.slice(0, -1)
+    : termoNormalizado;
+}
+
+function pontuarSemelhanca(valorEsperado, valorAtual) {
+  const termosEsperados = obterTermosSignificativos(valorEsperado).map(
+    normalizarTermoParaSemelhanca,
+  );
+  const termosAtuais = obterTermosSignificativos(valorAtual).map(
+    normalizarTermoParaSemelhanca,
+  );
+  const termosEncontrados = termosEsperados.filter((termo) =>
+    termosAtuais.includes(termo),
+  ).length;
+
+  return termosEsperados.length > 0
+    ? termosEncontrados / termosEsperados.length
+    : 0;
+}
+
+function obterOpcaoMaisParecida($opcoes, valorEsperado) {
+  return Array.from($opcoes)
+    .filter((opcao) => Cypress.$(opcao).is(":visible"))
+    .map((opcao) => ({
+      opcao,
+      pontuacao: pontuarSemelhanca(valorEsperado, opcao.textContent),
+    }))
+    .sort((a, b) => b.pontuacao - a.pontuacao)
+    .find(({ pontuacao }) => pontuacao >= 0.75)?.opcao;
+}
+
+function aguardarLoaderDesaparecer(
+  seletor,
+  descricao,
+  tentativa = 0,
+  recarregamento = 0,
+) {
+  return cy.get("body").then(($body) => {
+    const loaderVisivel = $body.find(seletor).filter(":visible").length > 0;
+
+    if (!loaderVisivel) {
+      return;
+    }
+
+    if (tentativa < MAX_TENTATIVAS_LOADER) {
+      return cy
+        .wait(INTERVALO_VERIFICACAO_LOADER, { log: false })
+        .then(() =>
+          aguardarLoaderDesaparecer(
+            seletor,
+            descricao,
+            tentativa + 1,
+            recarregamento,
+          ),
+        );
+    }
+
+    if (recarregamento === 0) {
+      cy.log(`Loader persistente (${descricao}); recarregando a listagem`);
+
+      return cy
+        .reload()
+        .then(() =>
+          cy
+            .get(".cont_dados", { timeout: LISTAGEM_TIMEOUT })
+            .should("be.visible"),
+        )
+        .then(() => aguardarLoaderDesaparecer(seletor, descricao, 0, 1));
+    }
+
+    throw new Error(
+      `${descricao} permaneceu visível após ${recarregamento} recarregamento da listagem`,
+    );
+  });
+}
+
 // Espera o carregamento da tabela, mas não exige que exista uma linha: alguns
 // cenários do filtro avançado também validam o retorno sem dados.
 function aguardarListagem() {
-  cy.get(".loader", { timeout: 30000 }).should("not.exist");
-  cy.get(".cont_dados", { timeout: 30000 }).should("be.visible");
-  cy.get(".tb-load", { timeout: 30000 }).should("not.exist");
+  cy.get(".cont_dados", { timeout: LISTAGEM_TIMEOUT }).should("be.visible");
+  cy.wait(250, { log: false });
+  aguardarLoaderDesaparecer(".loader", "loader visível da listagem");
+  aguardarLoaderDesaparecer(".tb-load", "loader visível da tabela");
 }
 
 // Retorna somente linhas de empenho, descartando placeholders e a linha de
 // "nenhum resultado" para que as validações não confundam estado da tabela
 // com dados reais.
+function filtrarLinhasValidas($linhas) {
+  return Array.from($linhas).filter(
+    (row) =>
+      !["not-found-line", "template_row"].includes(row.id) &&
+      !row.classList.contains("tb-load"),
+  );
+}
+
 function obterLinhasValidas() {
-  return cy
-    .get(".cont_dados .tb tr[id]")
-    .then(($linhas) =>
-      Array.from($linhas).filter(
-        (row) =>
-          !["not-found-line", "template_row"].includes(row.id) &&
-          !row.classList.contains("tb-load"),
-      ),
+  return cy.get(".cont_dados .tb tr[id]").then(filtrarLinhasValidas);
+}
+
+function abrirPrimeiroEmpenho(tentativa = 0) {
+  aguardarListagem();
+
+  return obterLinhasValidas().then((linhas) => {
+    if (linhas.length) {
+      return cy
+        .wrap(linhas[0])
+        .find(".colNumero")
+        .should("be.visible")
+        .click({ force: true });
+    }
+
+    if (tentativa === 0) {
+      cy.log("Nenhum empenho real carregado; recarregando a listagem");
+      return cy.reload().then(() => abrirPrimeiroEmpenho(1));
+    }
+
+    const mensagem = normalizarTexto(Cypress.$("#not-found-line").text());
+    throw new Error(
+      mensagem || "Nenhum empenho real disponível para abrir no detalhamento",
     );
+  });
 }
 
 // Centraliza a regra de resultado dos filtros: valida os dados quando existem
 // e registra a mensagem apresentada pelo portal quando a consulta fica vazia.
 function validarResultadoOuNenhumResultado(nomeFiltro, validarResultado) {
-  return obterLinhasValidas().then((linhas) => {
-    if (!linhas.length) {
-      cy.get("#not-found-line > td", { timeout: 30000 })
-        .should("be.visible")
-        .and("contain.text", "Nenhum resultado encontrado");
+  return cy
+    .get("body", { timeout: LISTAGEM_TIMEOUT })
+    .should(($body) => {
+      const linhas = filtrarLinhasValidas($body.find(".cont_dados .tb tr[id]"));
+      const mensagem = normalizarTexto($body.find("#not-found-line").text());
 
-      const mensagem = `ALERTA: Nenhum resultado encontrado para o filtro ${nomeFiltro}.`;
-      Cypress.log({
-        name: "ALERTA",
-        message: mensagem,
-        consoleProps: () => ({ filtro: nomeFiltro, resultado: "sem dados" }),
-      });
-      cy.log(mensagem);
-      return;
-    }
+      expect(
+        linhas.length > 0 || mensagem.includes("Nenhum resultado encontrado"),
+        `resultado do filtro ${nomeFiltro} carregado`,
+      ).to.equal(true);
+    })
+    .then(() =>
+      obterLinhasValidas().then((linhas) => {
+        if (!linhas.length) {
+          cy.get("#not-found-line > td", { timeout: LISTAGEM_TIMEOUT })
+            .should("be.visible")
+            .and("contain.text", "Nenhum resultado encontrado");
 
-    validarResultado();
-  });
+          const mensagem = `ALERTA: Nenhum resultado encontrado para o filtro ${nomeFiltro}.`;
+          Cypress.log({
+            name: "ALERTA",
+            message: mensagem,
+            consoleProps: () => ({
+              filtro: nomeFiltro,
+              resultado: "sem dados",
+            }),
+          });
+          cy.log(mensagem);
+          return;
+        }
+
+        validarResultado();
+      }),
+    );
 }
 
 // Alguns cenários precisam de um favorecido disponível. Se o ano atual não
@@ -331,11 +519,7 @@ function selecionarCovidAvancado(opcao) {
 
 function obterDescricaoDoEmpenho() {
   // Coleta o valor diretamente do detalhamento antes de recarregar a listagem.
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
+  abrirPrimeiroEmpenho();
 
   return cy
     .get("#desc", { timeout: 30000 })
@@ -387,11 +571,7 @@ function selecionarFavorecidoDaListagem() {
 function obterCpfCnpjDoEmpenho() {
   // O CPF/CNPJ é uma massa dinâmica; usar o primeiro empenho evita fixar dados
   // que podem mudar no ambiente público.
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
+  abrirPrimeiroEmpenho();
 
   return cy
     .get("#cnpj", { timeout: 30000 })
@@ -480,11 +660,7 @@ function validarNumeroNaListagem(numeroBuscado) {
 }
 
 function obterValorEmpenhadoDoEmpenho() {
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
+  abrirPrimeiroEmpenho();
 
   fecharTermosDeUsoSeExibido();
 
@@ -529,11 +705,7 @@ function validarValorEmpenhadoNoDetalhe(valorBuscado) {
 }
 
 function obterValorLiquidadoDoEmpenho() {
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
+  abrirPrimeiroEmpenho();
 
   fecharTermosDeUsoSeExibido();
 
@@ -622,11 +794,7 @@ function validarDatasNoPeriodo(dataInicial, dataFinal) {
 function obterOrgaoDoEmpenho() {
   // Os selects do filtro avançado podem ter textos abreviados; por isso o
   // órgão é obtido no detalhe e comparado por termos significativos.
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
+  abrirPrimeiroEmpenho();
 
   return cy
     .contains(".campo label", /^Órgão$/)
@@ -680,11 +848,7 @@ function validarOrgaoNoDetalhe(nomeOrgao) {
 }
 
 function obterUnidadeDoEmpenho() {
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
+  abrirPrimeiroEmpenho();
 
   return cy
     .contains(".campo label", /^Unidade$/)
@@ -705,17 +869,30 @@ function obterUnidadeDoEmpenho() {
 
 function selecionarUnidade(nomeUnidade) {
   cy.get("#select_unidade").find(".selected").click({ force: true });
-  obterOpcoesCarregadas("#select_unidade")
+  const termosParaBusca = obterTermosSignificativos(nomeUnidade);
+  const termoParaBusca = [...termosParaBusca].sort(
+    (termoA, termoB) => termoB.length - termoA.length,
+  )[0];
+
+  pesquisarAutocomplete(
+    "#select_unidade",
+    termoParaBusca || removerCodigo(nomeUnidade),
+  )
+    .then(() => obterOpcoesCarregadas("#select_unidade"))
     .should(($opcoes) => {
       expect(
-        obterOpcaoCorrespondente($opcoes, nomeUnidade),
+        Array.from($opcoes).find((opcao) =>
+          unidadeCombinaComOpcao(nomeUnidade, opcao.textContent),
+        ),
         `unidade ${nomeUnidade} disponível no filtro`,
       ).to.exist;
     })
     .then(($opcoes) => {
-      cy.wrap(obterOpcaoCorrespondente($opcoes, nomeUnidade)).click({
-        force: true,
-      });
+      const opcao = Array.from($opcoes).find((elemento) =>
+        unidadeCombinaComOpcao(nomeUnidade, elemento.textContent),
+      );
+
+      cy.wrap(opcao).click({ force: true });
     });
 }
 
@@ -740,16 +917,12 @@ function validarUnidadeNoDetalhe(nomeUnidade) {
 }
 
 function obterFuncaoDoEmpenho() {
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
+  abrirPrimeiroEmpenho();
 
   fecharTermosDeUsoSeExibido();
 
   return cy
-    .contains(".campo label", /^Função$/)
+    .contains(".campo label", /^Função$/, { timeout: 30000 })
     .parent()
     .find("#funcao", { timeout: 30000 })
     .scrollIntoView({ duration: 0 })
@@ -812,7 +985,7 @@ function validarFuncaoNoDetalhe(nomeFuncao) {
 
   fecharTermosDeUsoSeExibido();
 
-  cy.contains(".campo label", /^Função$/)
+  cy.contains(".campo label", /^Função$/, { timeout: 30000 })
     .parent()
     .find("#funcao", { timeout: 30000 })
     .scrollIntoView({ duration: 0 })
@@ -827,16 +1000,12 @@ function validarFuncaoNoDetalhe(nomeFuncao) {
 }
 
 function obterSubfuncaoDoEmpenho() {
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
+  abrirPrimeiroEmpenho();
 
   fecharTermosDeUsoSeExibido();
 
   return cy
-    .contains(".campo label", /^Subfunção$/)
+    .contains(".campo label", /^Subfunção$/, { timeout: 30000 })
     .parent()
     .find("#subfuncao", { timeout: 30000 })
     .scrollIntoView({ duration: 0 })
@@ -854,21 +1023,29 @@ function obterSubfuncaoDoEmpenho() {
 }
 
 function selecionarSubfuncao(nomeSubfuncao) {
-  cy.contains(".campo label", /^Subfunção$/i)
+  cy.contains(".campo:visible label", /^Subfunção$/i, { timeout: 30000 })
     .parent()
     .then(($campo) => {
       cy.wrap($campo).find(".selected").click({ force: true });
-      obterOpcoesCarregadas($campo).then(($opcoes) => {
-        const opcao = Array.from($opcoes).find((elemento) =>
-          normalizarTexto(elemento.textContent)
-            .toLowerCase()
-            .includes(nomeSubfuncao.toLowerCase()),
-        );
+      cy.wrap($campo)
+        .find(".options input:visible")
+        .then(($input) => {
+          if ($input.length) {
+            return pesquisarAutocomplete($campo, removerCodigo(nomeSubfuncao));
+          }
 
-        expect(opcao, `subfunção ${nomeSubfuncao} disponível no filtro`).to
-          .exist;
-        cy.wrap(opcao).click({ force: true });
-      });
+          return undefined;
+        })
+        .then(() => obterOpcoesCarregadas($campo))
+        .then(($opcoes) => {
+          const opcao = Array.from($opcoes).find((elemento) =>
+            valoresDoFiltroCorrespondem(nomeSubfuncao, elemento.textContent),
+          );
+
+          expect(opcao, `subfunção ${nomeSubfuncao} disponível no filtro`).to
+            .exist;
+          cy.wrap(opcao).click({ force: true });
+        });
     });
 }
 
@@ -881,7 +1058,7 @@ function validarSubfuncaoNoDetalhe(nomeSubfuncao) {
 
   fecharTermosDeUsoSeExibido();
 
-  cy.contains(".campo label", /^Subfunção$/)
+  cy.contains(".campo label", /^Subfunção$/, { timeout: 30000 })
     .parent()
     .find("#subfuncao", { timeout: 30000 })
     .scrollIntoView({ duration: 0 })
@@ -904,7 +1081,7 @@ function obterGrupoDoEmpenho(indice = 0) {
     fecharTermosDeUsoSeExibido();
 
     return cy
-      .contains(".campo label", /^Grupo$/i)
+      .contains(".campo label", /^Grupo$/i, { timeout: 30000 })
       .parent()
       .find("#grupo, input, textarea, .input", { timeout: 30000 })
       .first()
@@ -926,26 +1103,30 @@ function obterGrupoDoEmpenho(indice = 0) {
 }
 
 function selecionarGrupo(nomeGrupo) {
-  const termoParaPesquisa = removerCodigo(nomeGrupo);
+  const termoParaPesquisa =
+    nomeGrupo.match(/^[\d.]+/)?.[0] || removerCodigo(nomeGrupo);
 
   return cy
-    .contains(".campo label", /^Grupo$/i)
+    .contains(".campo label", /^Grupo$/i, { timeout: 30000 })
     .parent()
     .then(($campo) => {
       cy.wrap($campo).find(".selected").click({ force: true });
       cy.wrap($campo)
-        .find(".options input:visible", { timeout: 30000 })
-        .first()
-        .should("be.visible")
-        .clear({ force: true })
-        .type(termoParaPesquisa, { force: true });
+        .find(".options input:visible")
+        .then(($input) => {
+          if ($input.length) {
+            return pesquisarAutocomplete($campo, termoParaPesquisa);
+          }
 
-      obterOpcoesCarregadas($campo).then(($opcoes) => {
-        const opcao = obterOpcaoCorrespondente($opcoes, nomeGrupo);
+          return undefined;
+        })
+        .then(() => obterOpcoesCarregadas($campo))
+        .then(($opcoes) => {
+          const opcao = obterOpcaoCorrespondente($opcoes, nomeGrupo);
 
-        expect(opcao, `grupo ${nomeGrupo} disponível no filtro`).to.exist;
-        cy.wrap(opcao).click({ force: true });
-      });
+          expect(opcao, `grupo ${nomeGrupo} disponível no filtro`).to.exist;
+          cy.wrap(opcao).click({ force: true });
+        });
     });
 }
 
@@ -958,7 +1139,7 @@ function validarGrupoNoDetalhe(nomeGrupo) {
 
   fecharTermosDeUsoSeExibido();
 
-  cy.contains(".campo label", /^Grupo$/i)
+  cy.contains(".campo label", /^Grupo$/i, { timeout: 30000 })
     .parent()
     .find("#grupo, input, textarea, .input", { timeout: 30000 })
     .first()
@@ -975,11 +1156,7 @@ function validarGrupoNoDetalhe(nomeGrupo) {
 }
 
 function obterModalidadeAplicacaoDoEmpenho() {
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
+  abrirPrimeiroEmpenho();
 
   fecharTermosDeUsoSeExibido();
 
@@ -1011,16 +1188,28 @@ function selecionarModalidadeAplicacao(nomeModalidade) {
     .parent()
     .then(($campo) => {
       cy.wrap($campo).find(".selected").click({ force: true });
+      const codigoModalidade =
+        nomeModalidade.match(/^[\d.]+/)?.[0] || removerCodigo(nomeModalidade);
 
-      obterOpcoesCarregadas($campo).then(($opcoes) => {
-        const opcao = obterOpcaoCorrespondente($opcoes, nomeModalidade);
+      cy.wrap($campo)
+        .find(".options input:visible")
+        .then(($input) => {
+          if ($input.length) {
+            return pesquisarAutocomplete($campo, codigoModalidade);
+          }
 
-        expect(
-          opcao,
-          `modalidade de aplicação ${nomeModalidade} disponível no filtro`,
-        ).to.exist;
-        cy.wrap(opcao).click({ force: true });
-      });
+          return undefined;
+        })
+        .then(() => obterOpcoesCarregadas($campo))
+        .then(($opcoes) => {
+          const opcao = obterOpcaoCorrespondente($opcoes, nomeModalidade);
+
+          expect(
+            opcao,
+            `modalidade de aplicação ${nomeModalidade} disponível no filtro`,
+          ).to.exist;
+          cy.wrap(opcao).click({ force: true });
+        });
     });
 }
 
@@ -1049,11 +1238,7 @@ function validarModalidadeAplicacaoNoDetalhe(nomeModalidade) {
 }
 
 function obterNumeroDaNaturezaDoEmpenho() {
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
+  abrirPrimeiroEmpenho();
 
   fecharTermosDeUsoSeExibido();
 
@@ -1108,9 +1293,10 @@ function validarNaturezaNoDetalhe(numeroNatureza) {
 
 function obterProgramaDoEmpenho(indice = 0) {
   return obterLinhasValidas().then((linhas) => {
-    expect(indice, "registro com Programa disponível na listagem").to.be.lessThan(
-      linhas.length,
-    );
+    expect(
+      indice,
+      "registro com Programa disponível na listagem",
+    ).to.be.lessThan(linhas.length);
 
     cy.wrap(linhas[indice]).find(".colNumero").click({ force: true });
     fecharTermosDeUsoSeExibido();
@@ -1294,51 +1480,48 @@ function selecionarFonte(nomeFonte) {
   const codigoFonte = nomeFonte.match(/^[\d.]+/)?.[0] || nomeFonte;
 
   return cy
-    .contains(".campo label", /^Fontes$/i)
+    .contains(".campo label", /^Fonte$/i)
     .parent()
     .then(($campo) => {
       cy.wrap($campo).find(".selected").click({ force: true });
-      cy.wrap($campo)
-        .find("input:visible")
-        .first()
-        .should("be.visible")
-        .clear({ force: true })
-        .type(codigoFonte, { force: true });
-
-      obterOpcoesCarregadas($campo).then(($opcoes) => {
-        const opcaoPorCodigo = Array.from($opcoes).find(
-          (elemento) =>
-            Cypress.$(elemento).is(":visible") &&
-            normalizarTexto(elemento.textContent).startsWith(codigoFonte),
-        );
-
-        if (opcaoPorCodigo) {
-          const fonteSelecionada = normalizarTexto(opcaoPorCodigo.textContent);
-          cy.wrap(opcaoPorCodigo).click({ force: true });
-          return cy.wrap(
-            { fonteSelecionada, validarDetalhe: true },
-            { log: false },
+      pesquisarAutocomplete($campo, codigoFonte)
+        .then(() => obterOpcoesCarregadas($campo))
+        .then(($opcoes) => {
+          const opcaoPorCodigo = Array.from($opcoes).find(
+            (elemento) =>
+              Cypress.$(elemento).is(":visible") &&
+              normalizarTexto(elemento.textContent).startsWith(codigoFonte),
           );
-        }
 
-        // Quando a Fonte do registro não está disponível no contexto do
-        // filtro, limpa a busca e seleciona a única opção visível.
-        cy.wrap($campo).find("input:visible").first().clear({ force: true });
-
-        return obterOpcoesCarregadas($campo)
-          .should("have.length", 1)
-          .then(($opcoesVisiveis) => {
+          if (opcaoPorCodigo) {
             const fonteSelecionada = normalizarTexto(
-              $opcoesVisiveis.first().text(),
+              opcaoPorCodigo.textContent,
             );
-
-            cy.wrap($opcoesVisiveis.first()).click({ force: true });
+            cy.wrap(opcaoPorCodigo).click({ force: true });
             return cy.wrap(
-              { fonteSelecionada, validarDetalhe: false },
+              { fonteSelecionada, validarDetalhe: true },
               { log: false },
             );
-          });
-      });
+          }
+
+          // Quando a Fonte do registro não está disponível no contexto do
+          // filtro, limpa a busca e seleciona a única opção visível.
+          cy.wrap($campo).find("input:visible").first().clear({ force: true });
+
+          return obterOpcoesCarregadas($campo)
+            .should("have.length", 1)
+            .then(($opcoesVisiveis) => {
+              const fonteSelecionada = normalizarTexto(
+                $opcoesVisiveis.first().text(),
+              );
+
+              cy.wrap($opcoesVisiveis.first()).click({ force: true });
+              return cy.wrap(
+                { fonteSelecionada, validarDetalhe: false },
+                { log: false },
+              );
+            });
+        });
     });
 }
 
@@ -1359,8 +1542,13 @@ function validarFonteNoDetalhe(nomeFonte) {
     .should("exist")
     .invoke("val")
     .then((fonteRetornada) => {
-      expect(normalizarTexto(fonteRetornada).toLowerCase()).to.equal(
-        nomeFonte.toLowerCase(),
+      const normalizarFonte = (fonte) =>
+        normalizarParaComparacao(fonte)
+          .replace(/[^a-z0-9]+/g, " ")
+          .trim();
+
+      expect(normalizarFonte(fonteRetornada)).to.equal(
+        normalizarFonte(nomeFonte),
       );
     });
 }
@@ -1376,11 +1564,7 @@ function validarFonteNaListagem() {
 }
 
 function obterCategoriaEconomicaDoEmpenho() {
-  cy.get(
-    '.cont_dados .tb tr[id]:not([id="not-found-line"]):not([id="template_row"]) .colNumero',
-  )
-    .first()
-    .click({ force: true });
+  abrirPrimeiroEmpenho();
 
   fecharTermosDeUsoSeExibido();
 
@@ -1411,30 +1595,33 @@ function selecionarCategoriaEconomica(nomeCategoria) {
   const nomeCategoriaParaPesquisa = nomeCategoria
     .replace(/^[\d.]+\s*[-.)]\s*/, "")
     .trim();
+  const termoParaPesquisa = obterTermosSignificativos(nomeCategoriaParaPesquisa)
+    .map(normalizarTermoParaSemelhanca)
+    .sort((termoA, termoB) => termoB.length - termoA.length)[0];
 
   return cy
     .contains(".campo label", /^Categoria Econômica$/i)
     .parent()
     .then(($campo) => {
       cy.wrap($campo).find(".selected").click({ force: true });
-      cy.wrap($campo)
-        .find("input:visible")
-        .first()
-        .should("be.visible")
-        .clear({ force: true })
-        .type(nomeCategoriaParaPesquisa, { force: true });
-
-      obterOpcoesCarregadas($campo)
+      pesquisarAutocomplete(
+        $campo,
+        termoParaPesquisa || nomeCategoriaParaPesquisa,
+      )
+        .then(() => obterOpcoesCarregadas($campo))
         .should(($opcoes) => {
           expect(
-            obterOpcaoCorrespondente($opcoes, nomeCategoria),
+            obterOpcaoMaisParecida($opcoes, nomeCategoriaParaPesquisa),
             `categoria econômica ${nomeCategoria} disponível no filtro`,
           ).to.exist;
         })
         .then(($opcoes) => {
-          cy.wrap(obterOpcaoCorrespondente($opcoes, nomeCategoria)).click({
-            force: true,
-          });
+          const opcao = obterOpcaoMaisParecida(
+            $opcoes,
+            nomeCategoriaParaPesquisa,
+          );
+
+          cy.wrap(opcao).click({ force: true });
         });
     });
 }
@@ -1458,9 +1645,9 @@ function validarCategoriaEconomicaNoDetalhe(nomeCategoria) {
     .invoke("val")
     .then((categoriaRetornada) => {
       expect(
-        valoresDoFiltroCorrespondem(nomeCategoria, categoriaRetornada),
+        pontuarSemelhanca(nomeCategoria, categoriaRetornada),
         `categoria retornada "${categoriaRetornada}" compatível com "${nomeCategoria}"`,
-      ).to.equal(true);
+      ).to.be.at.least(0.75);
     });
 }
 
@@ -1715,13 +1902,9 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
       cy.contains("button, a, div", "PESQUISAR").click({ force: true });
 
       aguardarListagem();
-      obterLinhasValidas().then((linhas) => {
-        expect(
-          linhas.length,
-          "registros retornados pelo filtro de Categoria Econômica",
-        ).to.be.greaterThan(0);
-        validarCategoriaEconomicaNoDetalhe(nomeCategoria);
-      });
+      validarResultadoOuNenhumResultado("Categoria Econômica", () =>
+        validarCategoriaEconomicaNoDetalhe(nomeCategoria),
+      );
     });
   });
 

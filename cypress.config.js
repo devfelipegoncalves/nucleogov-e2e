@@ -87,9 +87,16 @@ module.exports = defineConfig({
           expectedFields = [],
           adaptador = "padrao",
           reportarCamposAusentes = false,
+          timeoutMs = 300000,
         }) {
           const nomesDeArquivo = [fileName, ...fileNames].filter(Boolean);
-          const deadline = Date.now() + 30000;
+          const margemDeRetornoMs = 1000;
+          const deadline =
+            Date.now() + Math.max(1000, timeoutMs - margemDeRetornoMs);
+          const estabilidadeMinimaMs = 2000;
+          let caminhoTemporarioAnterior = "";
+          let tamanhoTemporarioAnterior = 0;
+          let inicioDaEstabilidade = 0;
 
           function normalizarNumero(valor) {
             return String(valor).replace(/[^0-9-]/g, "");
@@ -121,11 +128,10 @@ module.exports = defineConfig({
             return String(valor).replace(/^[\d.]+\s*[-.)]\s*/, "");
           }
 
-          function valorProdataEncontrado(esperado, conteudo) {
+          function valorProdataEncontrado(esperado, conteudoCompacto) {
             const esperadoCompacto = normalizarTextoCompacto(
               removerCodigoInicial(esperado),
             );
-            const conteudoCompacto = normalizarTextoCompacto(conteudo);
 
             return (
               esperadoCompacto.length >= 4 &&
@@ -135,24 +141,63 @@ module.exports = defineConfig({
 
           return new Promise((resolve, reject) => {
             function verificarArquivo() {
-              const nomeArquivoEncontrado = nomesDeArquivo.find((nome) =>
+              const nomeArquivoFinal = nomesDeArquivo.find((nome) =>
                 fs.existsSync(path.join(config.downloadsFolder, nome)),
               );
-              const filePath = nomeArquivoEncontrado
-                ? path.join(config.downloadsFolder, nomeArquivoEncontrado)
-                : "";
+              const nomeArquivoTemporario = nomesDeArquivo.find((nome) =>
+                fs.existsSync(
+                  path.join(config.downloadsFolder, `${nome}.crdownload`),
+                ),
+              );
+              const nomeArquivoEncontrado =
+                nomeArquivoFinal || nomeArquivoTemporario;
+              const filePath = nomeArquivoFinal
+                ? path.join(config.downloadsFolder, nomeArquivoFinal)
+                : nomeArquivoTemporario
+                  ? path.join(
+                      config.downloadsFolder,
+                      `${nomeArquivoTemporario}.crdownload`,
+                    )
+                  : "";
 
               if (filePath) {
-                const tamanho = fs.statSync(filePath).size;
+                let tamanho = 0;
 
-                if (tamanho > 0) {
-                  const conteudo = decodificarEntidadesHtml(
-                    fs.readFileSync(filePath).toString("utf8"),
-                  )
+                try {
+                  tamanho = fs.statSync(filePath).size;
+                } catch {
+                  setTimeout(verificarArquivo, 100);
+                  return;
+                }
+
+                const arquivoFinalDisponivel = Boolean(nomeArquivoFinal) &&
+                  tamanho > 0;
+                const arquivoTemporarioEstavel =
+                  !nomeArquivoFinal &&
+                  Boolean(nomeArquivoTemporario) &&
+                  tamanho > 0 &&
+                  caminhoTemporarioAnterior === filePath &&
+                  tamanhoTemporarioAnterior === tamanho &&
+                  Date.now() - inicioDaEstabilidade >= estabilidadeMinimaMs;
+
+                if (arquivoFinalDisponivel || arquivoTemporarioEstavel) {
+                  let conteudoArquivo;
+
+                  try {
+                    conteudoArquivo = fs.readFileSync(filePath).toString("utf8");
+                  } catch {
+                    setTimeout(verificarArquivo, 100);
+                    return;
+                  }
+
+                  const conteudo = decodificarEntidadesHtml(conteudoArquivo)
                     .normalize("NFD")
                     .replace(/[\u0300-\u036f]/g, "")
                     .replace(/\s+/g, " ")
                     .toLowerCase();
+                  const conteudoCompacto = normalizarTextoCompacto(conteudo);
+                  let conteudoDocumentos;
+                  let conteudoNumerico;
                   const camposParaComparar = expectedFields
                     .map(({ label, value }) => {
                       const valorNormalizado = String(value)
@@ -180,9 +225,15 @@ module.exports = defineConfig({
                     .filter(({ esperado }) => esperado);
                   const camposAusentes = camposParaComparar
                     .filter(({ esperado, ehDocumento, ehCampoMonetario }) => {
-                      const conteudoParaComparacao = ehDocumento
-                        ? conteudo.replace(/[^0-9*]/g, "")
-                        : conteudo;
+                      let conteudoParaComparacao = conteudo;
+
+                      if (ehDocumento) {
+                        conteudoDocumentos ??= conteudo.replace(
+                          /[^0-9*]/g,
+                          "",
+                        );
+                        conteudoParaComparacao = conteudoDocumentos;
+                      }
 
                       if (conteudoParaComparacao.includes(esperado)) {
                         return false;
@@ -190,15 +241,16 @@ module.exports = defineConfig({
 
                       if (
                         adaptador === "prodata" &&
-                        valorProdataEncontrado(esperado, conteudo)
+                        valorProdataEncontrado(esperado, conteudoCompacto)
                       ) {
                         return false;
                       }
 
                       if (ehCampoMonetario) {
-                        return !conteudo
-                          .replace(/[^0-9-]/g, "")
-                          .includes(normalizarNumero(esperado));
+                        conteudoNumerico ??= conteudo.replace(/[^0-9-]/g, "");
+                        return !conteudoNumerico.includes(
+                          normalizarNumero(esperado),
+                        );
                       }
 
                       return true;
@@ -221,7 +273,7 @@ module.exports = defineConfig({
                   if (camposAusentes.length === 0 || reportarCamposAusentes) {
                     resolve({
                       tamanho,
-                      fileName: nomeArquivoEncontrado,
+                      fileName: nomeArquivoFinal || nomeArquivoTemporario,
                       camposComparados,
                       camposAusentes,
                     });
@@ -236,6 +288,17 @@ module.exports = defineConfig({
                     ),
                   );
                   return;
+                }
+
+                if (!nomeArquivoFinal) {
+                  if (
+                    caminhoTemporarioAnterior !== filePath ||
+                    tamanhoTemporarioAnterior !== tamanho
+                  ) {
+                    caminhoTemporarioAnterior = filePath;
+                    tamanhoTemporarioAnterior = tamanho;
+                    inicioDaEstabilidade = Date.now();
+                  }
                 }
               }
 

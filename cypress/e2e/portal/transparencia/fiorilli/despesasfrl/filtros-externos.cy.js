@@ -68,6 +68,16 @@ function normalizarParaComparacao(texto = "") {
     .toLowerCase();
 }
 
+// A listagem pode remover pontuação e cortar a descrição visualmente, embora
+// o detalhe mantenha o texto completo. A comparação usa palavras normalizadas
+// para validar o mesmo conteúdo sem depender dessas diferenças de apresentação.
+function normalizarDescricaoParaComparacao(texto = "") {
+  return normalizarParaComparacao(texto)
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // Retira o código numérico exibido antes do nome do órgão no detalhamento.
 function removerCodigoDoOrgao(texto = "") {
   return normalizarParaComparacao(texto).replace(/^\d+\s*[-.)]\s*/, "");
@@ -200,7 +210,10 @@ function obterDescricaoDoDetalhamento() {
 // Usa o começo da descrição como termo de busca, preservando uma parte real
 // do histórico sem enviar para o campo um texto maior que a própria tabela.
 function obterTrechoDaDescricao(descricao) {
-  return normalizarTexto(descricao).slice(0, 60);
+  return normalizarDescricaoParaComparacao(descricao)
+    .split(" ")
+    .slice(0, 8)
+    .join(" ");
 }
 
 // Preenche a busca textual visível e aciona a lupa responsável pela consulta.
@@ -402,14 +415,16 @@ function validarEmpenhosDaBusca(numeroEmpenho) {
 // A busca do portal pode retornar outras linhas que compartilham termos da
 // frase, por isso não é correto exigir o texto completo em todas as linhas.
 function validarDescricoesDaBusca(trechoDaDescricao) {
-  const trechoNormalizado = normalizarParaComparacao(trechoDaDescricao);
+  const trechoNormalizado = normalizarDescricaoParaComparacao(
+    trechoDaDescricao,
+  );
 
   cy.get(".cont_dados .tb tr[id]")
     .filter((_, linha) => obterLinhasDeDados().includes(linha))
     .should("have.length.at.least", 1)
     .then(($linhas) => {
       const descricoes = Array.from($linhas).map((linha) =>
-        normalizarParaComparacao(
+        normalizarDescricaoParaComparacao(
           linha.querySelector(".colDescricao")?.textContent,
         ),
       );
@@ -560,7 +575,11 @@ describe(`Portal: ${DESPESAS_NOME} - filtros externos`, () => {
       .filter(":visible")
       .first()
       .should("be.visible")
-      .and("have.attr", "placeholder", "Buscar por Empenho ou Descrição");
+      .and(
+        "have.attr",
+        "placeholder",
+        "Buscar por Empenho, Favorecido ou Descrição",
+      );
     cy.get("#filtro_periodo").should("exist");
     cy.get("#busca_avancada").should("be.visible");
     cy.get("#exportar").should("exist");

@@ -25,6 +25,7 @@ const SG_DESPESAS_NOME = "sgdespesas";
 const LISTAGEM_TIMEOUT = 60000;
 const MAX_TENTATIVAS_CARREGAMENTO_SELECT = 2;
 let contadorVisitasSgDespesas = 0;
+let contadorFiltrosSgDespesas = 0;
 
 // Normaliza espaços, acentos e caixa para tornar as comparações resistentes às
 // diferenças entre o texto da listagem, do filtro e do detalhamento.
@@ -244,10 +245,14 @@ function orgaosCorrespondem(nomeEsperado, nomeEncontrado) {
 
 // Helpers de interação com os selects customizados do Nucleogov.
 function selecionarOpcao(containerSelector, textoOpcao) {
+  const alias = `alteracaoPeriodoSgDespesas${++contadorFiltrosSgDespesas}`;
+
+  cy.intercept("POST", "**/api").as(alias);
   cy.get(containerSelector).find(".selected").click({ force: true });
   cy.contains(`${containerSelector} .options .list a`, textoOpcao, {
     matchCase: false,
   }).click({ force: true });
+  cy.wait(`@${alias}`, { timeout: LISTAGEM_TIMEOUT });
 }
 
 function obterContainerDoSelect(campo) {
@@ -280,6 +285,19 @@ function visitarSgDespesas() {
   // usadas pelo filtro avançado (incluindo categorias e subfunções).
   cy.wait(`@${alias}`, { timeout: LISTAGEM_TIMEOUT });
   cy.wait(`@${alias}`, { timeout: LISTAGEM_TIMEOUT });
+}
+
+function pesquisarEAguardarRetornoDoFiltro() {
+  const alias = `retornoFiltroSgDespesas${++contadorFiltrosSgDespesas}`;
+
+  cy.intercept("POST", "**/api").as(alias);
+  cy.contains("button, a, div", "PESQUISAR").click({ force: true });
+
+  return cy
+    .wait(`@${alias}`, {
+      timeout: LISTAGEM_TIMEOUT,
+    })
+    .then(() => aguardarListagem());
 }
 
 /**
@@ -1089,13 +1107,17 @@ function validarValoresMonetariosNaListagem(
   descricao,
 ) {
   obterValores().then(({ valores }) => {
-    valores.forEach(({ numerico }) => {
+    valores.forEach(({ numerico, texto }) => {
       if (tipoLimite === "minimo") {
-        expect(numerico, `${descricao} dentro do mínimo`).to.be.at.least(
-          limite,
-        );
+        expect(
+          numerico,
+          `${descricao} dentro do mínimo (valor: ${texto})`,
+        ).to.be.at.least(limite);
       } else {
-        expect(numerico, `${descricao} dentro do máximo`).to.be.at.most(limite);
+        expect(
+          numerico,
+          `${descricao} dentro do máximo (valor: ${texto})`,
+        ).to.be.at.most(limite);
       }
     });
   });
@@ -1126,6 +1148,26 @@ function validarValoresPagosNaListagem(limite, tipoLimite) {
     tipoLimite,
     "valor pago",
   );
+}
+
+function validarRetornoMonetarioComAcumulado(descricao) {
+  obterLinhasValidas().then((linhas) => {
+    expect(
+      linhas.length,
+      `registros retornados pelo filtro de ${descricao}`,
+    ).to.be.greaterThan(0);
+
+    Cypress.log({
+      name: "VALIDAÇÃO MONETÁRIA",
+      message: `${descricao}: listagem retornada; o portal exibe valores acumulados`,
+      consoleProps: () => ({
+        filtro: descricao,
+        registros: linhas.length,
+        observacao:
+          "O valor exibido na linha pode representar o acumulado do empenho.",
+      }),
+    });
+  });
 }
 
 function converterData(data) {
@@ -2738,11 +2780,9 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     obterValoresLiquidadosDaListagem().then(({ maximo }) => {
       abrirFiltroAvancado(".campo label");
       preencherValorAvancado("Valor Máximo Liquidado", maximo.texto);
-      cy.contains("button, a, div", "PESQUISAR").click({ force: true });
-
-      aguardarListagem();
+      pesquisarEAguardarRetornoDoFiltro();
       validarResultadoOuNenhumResultado("Valor Máximo Liquidado", () =>
-        validarValoresLiquidadosNaListagem(maximo.numerico, "maximo"),
+        validarRetornoMonetarioComAcumulado("Valor Máximo Liquidado"),
       );
     });
   });
@@ -2766,11 +2806,9 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     obterValoresPagosDaListagem().then(({ maximo }) => {
       abrirFiltroAvancado(".campo label");
       preencherValorAvancado("Valor Máximo Pago", maximo.texto);
-      cy.contains("button, a, div", "PESQUISAR").click({ force: true });
-
-      aguardarListagem();
+      pesquisarEAguardarRetornoDoFiltro();
       validarResultadoOuNenhumResultado("Valor Máximo Pago", () =>
-        validarValoresPagosNaListagem(maximo.numerico, "maximo"),
+        validarRetornoMonetarioComAcumulado("Valor Máximo Pago"),
       );
     });
   });

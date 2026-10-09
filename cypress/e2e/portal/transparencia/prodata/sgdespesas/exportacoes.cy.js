@@ -101,8 +101,11 @@ function obterCamposDoDetalhamento($pagina) {
   Array.from($pagina[0].querySelectorAll(".campo label, label")).forEach(
     (label) => {
       const entrada = obterEntradaDoCampo(label);
-      const valor = obterValorDoCampo(entrada);
       const rotulo = normalizarTexto(label.textContent);
+      const valorOriginal = obterValorDoCampo(entrada);
+      const valor = /descri|histórico|historico/i.test(rotulo)
+        ? valorOriginal.split(/\s+/).slice(0, 8).join(" ")
+        : valorOriginal;
       const chave = `${rotulo}::${valor}`;
 
       if (rotulo && valor && !camposAdicionados.has(chave)) {

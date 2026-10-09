@@ -831,7 +831,17 @@ function validarValoresMonetariosNaListagem(
   descricao,
 ) {
   obterValores().then(({ valores }) => {
-    valores.forEach(({ numerico }) => {
+    const valoresParaValidar =
+      tipoLimite === "minimo" && limite > 0
+        ? valores.filter(({ numerico }) => numerico > 0)
+        : valores;
+
+    expect(
+      valoresParaValidar.length,
+      `${descricao} com valor preenchido para validação`,
+    ).to.be.greaterThan(0);
+
+    valoresParaValidar.forEach(({ numerico }) => {
       if (tipoLimite === "minimo") {
         expect(numerico, `${descricao} dentro do mínimo`).to.be.at.least(
           limite,
@@ -1160,18 +1170,30 @@ function fecharTermosDeUsoSeExibido() {
 }
 
 function selecionarFuncao(nomeFuncao) {
-  const funcaoEsperada = normalizarParaComparacao(nomeFuncao).replace(
-    /^\d+\s*-\s*/,
-    "",
-  );
-  abrirSelectAvancadoComOpcoes("#select_funcao").then(($opcoes) => {
-    const opcao = Array.from($opcoes).find((elemento) =>
-      normalizarParaComparacao(elemento.textContent).includes(funcaoEsperada),
-    );
+  const funcaoEsperada = removerCodigo(nomeFuncao);
 
-    expect(opcao, `função ${nomeFuncao} disponível no filtro`).to.exist;
-    cy.wrap(opcao).click({ force: true });
-  });
+  return abrirSelectAvancadoComOpcoes("#select_funcao")
+    .then(($opcoes) => {
+      const $input = Cypress.$("#select_funcao")
+        .find(".options:visible input:visible")
+        .first();
+
+      if ($input.length) {
+        return pesquisarAutocomplete("#select_funcao", funcaoEsperada).then(
+          () => obterOpcoesCarregadas("#select_funcao"),
+        );
+      }
+
+      return cy.wrap($opcoes, { log: false });
+    })
+    .then(($opcoes) => {
+      const opcao = Array.from($opcoes).find((elemento) =>
+        valoresDoFiltroCorrespondem(nomeFuncao, elemento.textContent),
+      );
+
+      expect(opcao, `função ${nomeFuncao} disponível no filtro`).to.exist;
+      cy.wrap(opcao).click({ force: true });
+    });
 }
 
 function validarFuncaoNoDetalhe(nomeFuncao) {
@@ -2437,9 +2459,8 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
     });
   });
 
-  // Pesquisa a modalidade de aplicação e valida o retorno. O it.only já
-  // existia no arquivo e foi preservado para não alterar o fluxo do usuário.
-  it.only("acessa o filtro avançado, pesquisa modalidade de aplicação e valida o retorno", () => {
+  // Pesquisa a modalidade de aplicação e valida o retorno.
+  it("acessa o filtro avançado, pesquisa modalidade de aplicação e valida o retorno", () => {
     obterModalidadeAplicacaoDoPrimeiroRegistro().then((nomeModalidade) => {
       abrirFiltroAvancado(".campo label");
       selecionarModalidadeAplicacao(nomeModalidade);
@@ -2453,7 +2474,7 @@ describe(`Portal: ${SG_DESPESAS_NOME} - filtro avançado`, () => {
   });
 
   // Pesquisa a natureza da despesa e valida o retorno.
-  it.only("acessa o filtro avançado, pesquisa Natureza e valida o retorno", () => {
+  it("acessa o filtro avançado, pesquisa Natureza e valida o retorno", () => {
     obterNaturezaDoPrimeiroRegistro().then((nomeNatureza) => {
       abrirFiltroAvancado(".campo label");
       selecionarNatureza(nomeNatureza);

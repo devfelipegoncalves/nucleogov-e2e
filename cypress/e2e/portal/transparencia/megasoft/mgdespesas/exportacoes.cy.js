@@ -3,7 +3,12 @@
 const DESPESAS_PATH =
   Cypress.env("DESPESAS_PATH") || "/cidadao/transparencia/mgdespesas";
 const DESPESAS_NOME = Cypress.env("DESPESAS_NOME") || "mgdespesas";
-const LISTAGEM_TIMEOUT = 30000;
+const LISTAGEM_TIMEOUT = 60000;
+const NOME_ARQUIVO_EXPORTACAO =
+  Cypress.env("DESPESAS_EXPORTACAO_NOME") ||
+  (DESPESAS_NOME === "sgdespesas"
+    ? "relatório-despesas"
+    : "relatorio-despesas");
 
 // Cada item gera um it independente. A extensão também define o nome do
 // arquivo esperado no diretório configurado em downloadsFolder.
@@ -23,9 +28,19 @@ function normalizarTexto(texto = "") {
 
 function aguardarListagem() {
   // A tabela é carregada por chamadas assíncronas depois da visita à página.
-  cy.get(".loader", { timeout: LISTAGEM_TIMEOUT }).should("not.exist");
+  cy.get("body", { timeout: LISTAGEM_TIMEOUT }).should(($body) => {
+    expect(
+      $body.find(".loader:visible").length,
+      "loader visível da listagem",
+    ).to.equal(0);
+  });
   cy.get(".cont_dados", { timeout: LISTAGEM_TIMEOUT }).should("be.visible");
-  cy.get(".tb-load", { timeout: LISTAGEM_TIMEOUT }).should("not.exist");
+  cy.get("body", { timeout: LISTAGEM_TIMEOUT }).should(($body) => {
+    expect(
+      $body.find(".tb-load:visible").length,
+      "loader visível da tabela",
+    ).to.equal(0);
+  });
 }
 
 function obterLinhasDeDados() {
@@ -47,7 +62,12 @@ function obterCamposDoDetalhamento($popup) {
   // A comparação posterior considera apenas os valores efetivamente preenchidos.
   const campos = Array.from($popup[0].querySelectorAll("label"))
     .map((label) => {
-      const campo = label.parentElement?.querySelector("textarea, input");
+      const container = label.closest(".campo") || label.parentElement;
+      const campo =
+        container?.querySelector(
+          "textarea, input:not([type='hidden']), select, .input",
+        ) ||
+        (label.htmlFor && label.ownerDocument.getElementById(label.htmlFor));
 
       return {
         label: normalizarTexto(label.textContent),
@@ -60,8 +80,59 @@ function obterCamposDoDetalhamento($popup) {
   return campos;
 }
 
+function obterTextoDaColuna($linha, seletores) {
+  for (const seletor of seletores) {
+    const $celula = $linha.find(seletor).first();
+
+    if ($celula.length) {
+      const texto = normalizarTexto($celula.attr("title") || $celula.text());
+
+      if (texto) return texto;
+    }
+  }
+
+  return "";
+}
+
+function obterCamposDoMovimentoDaListagem($linha) {
+  const movimento = obterTextoDaColuna($linha, [
+    ".colNomeMovimento",
+    ".colMovimento",
+    ".colTipoMovimento",
+    ".colTipo",
+  ]).toLowerCase();
+  const descricao = obterTextoDaColuna($linha, [
+    ".colDescricao",
+    ".colDescrição",
+    ".colDesc",
+  ]);
+  const seletoresDeValor = movimento.includes("liquid")
+    ? [".colValorLiquidado", ".colValorLiquidacao", ".colLiquidado"]
+    : movimento.includes("pag")
+      ? [".colValorPago", ".colValorPagamento", ".colPago"]
+      : [".colValorEmpenhado", ".colValorEmpenho", ".colEmpenhado"];
+  const valor = obterTextoDaColuna($linha, seletoresDeValor).replace(
+    /^[+-]\s*/,
+    "",
+  );
+  const descricaoExportavel = descricao
+    .split(/\s+/)
+    .slice(0, 8)
+    .join(" ");
+
+  return [
+    descricaoExportavel.length > 10 && {
+      label: "Descrição",
+      value: descricaoExportavel,
+    },
+    valor && { label: "Valor", value: valor },
+  ].filter(Boolean);
+}
+
 function obterDetalhamentoDaPrimeiraDespesa() {
   // 1. Abre o detalhamento da primeira despesa disponível na listagem.
+  let camposDoMovimento = [];
+
   cy.get(".cont_dados .tb tr[id]")
     .filter(
       (_, linha) =>
@@ -69,26 +140,70 @@ function obterDetalhamentoDaPrimeiraDespesa() {
         !linha.classList.contains("tb-load"),
     )
     .first()
-    .find("td.colIcone")
-    .trigger("mousedown", { which: 1, force: true });
+    .then(($linha) => {
+      camposDoMovimento = obterCamposDoMovimentoDaListagem($linha);
+
+      // MGDespesas usa a coluna de ícone; SGDespesas usa o número da
+      // despesa como gatilho do mesmo popup de detalhamento.
+      const $gatilho = $linha.find("td.colIcone, .colNumero").first();
+
+      expect(
+        $gatilho.length,
+        "gatilho do detalhamento na primeira despesa",
+      ).to.equal(1);
+
+      cy.wrap($gatilho).trigger("mousedown", { which: 1, force: true });
+    });
 
   return cy
-    .get("#popdetalhes", { timeout: LISTAGEM_TIMEOUT })
+    .get("body", { timeout: LISTAGEM_TIMEOUT })
     .should("be.visible")
-    .should(($popup) => {
+    .should(($body) => {
+      const popupVisivel = $body.find("#popdetalhes:visible").length > 0;
+      const paginaDeDetalhamento = $body.find("#orgao:visible").length > 0;
+      const $detalhamento = $body.find("#popdetalhes:visible").length
+        ? $body.find("#popdetalhes:visible")
+        : $body;
+
       expect(
-        obterCamposDoDetalhamento($popup),
+        popupVisivel || paginaDeDetalhamento,
+        "detalhamento carregado",
+      ).to.equal(true);
+      expect(
+        obterCamposDoDetalhamento($detalhamento),
         "campos carregados no detalhamento",
       ).to.have.length.greaterThan(0);
     })
-    .then(($popup) => {
+    .then(($body) => {
+      const $popup = $body.find("#popdetalhes:visible");
+      const $detalhamento = $popup.length ? $popup : $body;
+      const camposDoDetalhamento = obterCamposDoDetalhamento($detalhamento);
+      const camposExportados = $popup.length
+        ? camposDoDetalhamento
+        : camposDoDetalhamento.filter(
+            ({ label }) =>
+              !/^(descrição\s*\/\s*histórico|valor empenhado)$/i.test(label),
+          );
+
+      expect(
+        camposExportados,
+        "campos carregados no detalhamento",
+      ).to.have.length.greaterThan(0);
+
       // O popup pode aparecer antes de seus campos terminarem de carregar;
       // a coleta ocorre somente após os labels existirem.
-      const detalhamento = obterCamposDoDetalhamento($popup);
+      const detalhamento = [...camposExportados, ...camposDoMovimento];
 
-      // 2. Fecha o popup e deixa a tela pronta para a exportação.
-      cy.get("#popdetalhes #close").click({ force: true });
-      cy.get("#popdetalhes").should("not.exist");
+      // 2. Fecha o popup ou retorna da página de detalhe e deixa a tela
+      // pronta para a exportação.
+      if ($popup.length) {
+        cy.get("#popdetalhes #close").click({ force: true });
+        cy.get("#popdetalhes").should("not.exist");
+      } else {
+        cy.visitPortal(DESPESAS_PATH);
+        aguardarListagem();
+      }
+
       return cy.wrap(detalhamento, { log: false });
     });
 }
@@ -147,7 +262,7 @@ function validarArquivoExportado(formato, detalhamento) {
   cy.task(
     "assertDownloadedFileContains",
     {
-      fileName: `relatorio-despesas.${formato}`,
+      fileName: `${NOME_ARQUIVO_EXPORTACAO}.${formato}`,
       expectedFields: detalhamento,
     },
     { timeout: LISTAGEM_TIMEOUT },
@@ -164,7 +279,7 @@ function validarArquivoExportado(formato, detalhamento) {
 
     // Mostra no painel do cy:open o resultado individual de cada comparação.
     cy.log(
-      `[${formato.toUpperCase()}] arquivo aberto: relatorio-despesas.${formato}`,
+      `[${formato.toUpperCase()}] arquivo aberto: ${NOME_ARQUIVO_EXPORTACAO}.${formato}`,
     );
     camposComparados.forEach(({ label, value, regra, encontrado }) => {
       const resultado = encontrado ? "ENCONTRADO" : "AUSENTE";
@@ -175,7 +290,7 @@ function validarArquivoExportado(formato, detalhamento) {
         name: `COMPARAÇÃO ${formato.toUpperCase()}`,
         message: mensagem,
         consoleProps: () => ({
-          arquivo: `relatorio-despesas.${formato}`,
+          arquivo: `${NOME_ARQUIVO_EXPORTACAO}.${formato}`,
           campo: label,
           valorDoDetalhamento: value,
           encontradoNoArquivo: encontrado,
@@ -188,10 +303,14 @@ function validarArquivoExportado(formato, detalhamento) {
 
 function exportarOpcao(texto, formato, detalhamento) {
   // 3. Seleciona somente o formato deste it.
-  cy.get("#exportar .btt_options a:visible")
-    .contains(new RegExp(`^${texto}$`, "i"))
-    .click({ force: true });
-  validarArquivoExportado(formato, detalhamento);
+  cy.task("removeDownloadedFiles", {
+    fileNames: [`${NOME_ARQUIVO_EXPORTACAO}.${formato}`],
+  }).then(() => {
+    cy.get("#exportar .btt_options a:visible")
+      .contains(new RegExp(`^${texto}$`, "i"))
+      .click({ force: true });
+    validarArquivoExportado(formato, detalhamento);
+  });
 
   // 4 e 5. O arquivo foi aberto e comparado antes de o it ser concluído.
   cy.log(`[${DESPESAS_NOME}] arquivo ${formato} exportado`);

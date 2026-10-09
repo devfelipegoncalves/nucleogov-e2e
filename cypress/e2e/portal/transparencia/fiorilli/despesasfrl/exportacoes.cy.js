@@ -20,6 +20,12 @@ const FORMATOS_ESPERADOS = [
   { nome: "XML", extensao: "xml" },
 ];
 
+// O exportador do Fiorilli mantém a coluna Programa no layout, mas não
+// preenche o valor dela. O detalhamento, por outro lado, retorna o Programa
+// corretamente; por isso esse campo não pode ser usado como valor de
+// comparação dos arquivos enquanto essa divergência do endpoint existir.
+const CAMPOS_SEM_VALOR_NA_EXPORTACAO = [/^programa$/i];
+
 function normalizarTexto(texto = "") {
   return String(texto).replace(/\s+/g, " ").trim();
 }
@@ -88,6 +94,29 @@ function obterCamposDoDetalhamento($detalhamento) {
     "campos preenchidos no detalhamento",
   ).to.have.length.greaterThan(0);
   return campos;
+}
+
+function filtrarCamposComparaveisNaExportacao(campos) {
+  const camposIgnorados = campos.filter(({ label }) =>
+    CAMPOS_SEM_VALOR_NA_EXPORTACAO.some((padrao) => padrao.test(label)),
+  );
+
+  camposIgnorados.forEach(({ label, value }) => {
+    Cypress.log({
+      name: "CAMPO SEM VALOR NA EXPORTAÇÃO FIORILLI",
+      message: `${label}: "${value}"`,
+      consoleProps: () => ({
+        campo: label,
+        valorDoDetalhamento: value,
+        motivo: "A coluna é exportada, mas o endpoint retorna o valor vazio.",
+      }),
+    });
+  });
+
+  return campos.filter(
+    ({ label }) =>
+      !CAMPOS_SEM_VALOR_NA_EXPORTACAO.some((padrao) => padrao.test(label)),
+  );
 }
 
 function obterDetalhamentoDaPrimeiraDespesa() {
@@ -199,7 +228,7 @@ function validarArquivoExportado(formato, detalhamento) {
     {
       fileName,
       fileNames,
-      expectedFields: detalhamento,
+      expectedFields: filtrarCamposComparaveisNaExportacao(detalhamento),
       adaptador: "fiorilli",
       reportarCamposAusentes: true,
     },
@@ -236,6 +265,15 @@ function validarArquivoExportado(formato, detalhamento) {
       camposAusentes,
       `campos ausentes no arquivo ${formato}`,
     ).to.deep.equal([]);
+
+    return cy
+      .task("readDownloadedFile", { fileNames: [arquivo] })
+      .then(({ content }) => {
+        expect(
+          normalizarTexto(content).toLowerCase(),
+          `coluna Programa no arquivo ${formato}`,
+        ).to.contain("programa");
+      });
   });
 }
 

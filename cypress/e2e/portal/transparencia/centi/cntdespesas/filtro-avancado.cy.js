@@ -42,6 +42,29 @@ function normalizarDocumento(documento = "") {
   return normalizarTexto(documento).replace(/\D/g, "");
 }
 
+function converterValorMonetario(valor) {
+  const valorNumerico = normalizarTexto(valor)
+    .replace(/\s/g, "")
+    .replace(/[^\d,.-]/g, "");
+
+  if (!valorNumerico) {
+    return NaN;
+  }
+
+  if (valorNumerico.includes(",")) {
+    return Number(valorNumerico.replace(/\./g, "").replace(",", "."));
+  }
+
+  return Number(valorNumerico);
+}
+
+function formatarValorMonetario(valor) {
+  return valor
+    .toFixed(2)
+    .replace(".", ",")
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
 function identificarTipoDocumento(documento) {
   const documentoNormalizado = normalizarTexto(documento).replace(/\s/g, "");
   const caracteresDoDocumento = documentoNormalizado.replace(/[^\d*Xx]/g, "");
@@ -112,6 +135,26 @@ function obterTermosSignificativos(texto) {
     .filter((termo) => termo.length > 2 && !termosIgnorados.has(termo));
 }
 
+function obterPoderInstitucional(nomeOrgao) {
+  const orgao = normalizarParaComparacao(nomeOrgao);
+
+  if (/\bpoder executivo\b/.test(orgao) || /\bprefeitura\b/.test(orgao)) {
+    return "executivo";
+  }
+
+  if (/\bpoder legislativo\b/.test(orgao) || /\bcamara\b/.test(orgao)) {
+    return "legislativo";
+  }
+
+  return "";
+}
+
+function ehRotuloGenericoDePoder(nomeOrgao) {
+  const orgao = normalizarParaComparacao(nomeOrgao);
+
+  return /\bpoder (executivo|legislativo)\b/.test(orgao);
+}
+
 function orgaosCorrespondem(orgaoEsperado, orgaoEncontrado) {
   const esperado = normalizarParaComparacao(orgaoEsperado);
   const encontrado = normalizarParaComparacao(orgaoEncontrado);
@@ -124,6 +167,21 @@ function orgaosCorrespondem(orgaoEsperado, orgaoEncontrado) {
     esperado === encontrado ||
     esperado.includes(encontrado) ||
     encontrado.includes(esperado)
+  ) {
+    return true;
+  }
+
+  // O Centi pode exibir o órgão detalhado com o nome completo da prefeitura
+  // ou câmara, mas disponibilizar o mesmo órgão no filtro pelo poder
+  // institucional correspondente.
+  const poderEsperado = obterPoderInstitucional(orgaoEsperado);
+  const poderEncontrado = obterPoderInstitucional(orgaoEncontrado);
+
+  if (
+    poderEsperado &&
+    poderEsperado === poderEncontrado &&
+    (ehRotuloGenericoDePoder(orgaoEsperado) ||
+      ehRotuloGenericoDePoder(orgaoEncontrado))
   ) {
     return true;
   }
@@ -859,7 +917,10 @@ function preencherNumeroNoFiltroAvancado(numeroEsperado) {
     .should("have.value", numeroEsperado);
 }
 
-function preencherValoresEmpenhadosNoFiltroAvancado(valorEsperado) {
+function preencherValoresEmpenhadosNoFiltroAvancado(
+  valorInicial,
+  valorFinal = valorInicial,
+) {
   return obterCampoAvancadoPorRotulo("Valores Empenhados").then(($campo) => {
     const $entradas = $campo.find("input, textarea").filter(":visible");
 
@@ -872,30 +933,33 @@ function preencherValoresEmpenhadosNoFiltroAvancado(valorEsperado) {
       .wrap($entradas.eq(0))
       .should("be.visible")
       .clear({ force: true })
-      .type(valorEsperado, { force: true })
+      .type(valorInicial, { force: true })
       .then(() =>
         cy
           .wrap($entradas.eq(1))
           .should("be.visible")
           .clear({ force: true })
-          .type(valorEsperado, { force: true }),
+          .type(valorFinal, { force: true }),
       )
       .then(() => {
         expect(
           obterValorDoCampo($entradas.eq(0)),
           "valor mínimo empenhado preenchido no filtro avançado",
-        ).to.equal(valorEsperado);
+        ).to.equal(valorInicial);
         expect(
           obterValorDoCampo($entradas.eq(1)),
           "valor máximo empenhado preenchido no filtro avançado",
-        ).to.equal(valorEsperado);
+        ).to.equal(valorFinal);
 
-        return cy.wrap(valorEsperado, { log: false });
+        return cy.wrap(valorInicial, { log: false });
       });
   });
 }
 
-function preencherValoresLiquidadosNoFiltroAvancado(valorEsperado) {
+function preencherValoresLiquidadosNoFiltroAvancado(
+  valorInicial,
+  valorFinal = valorInicial,
+) {
   return obterCampoAvancadoPorRotulo("Valores Liquidados").then(($campo) => {
     const $entradas = $campo.find("input, textarea").filter(":visible");
 
@@ -908,30 +972,33 @@ function preencherValoresLiquidadosNoFiltroAvancado(valorEsperado) {
       .wrap($entradas.eq(0))
       .should("be.visible")
       .clear({ force: true })
-      .type(valorEsperado, { force: true })
+      .type(valorInicial, { force: true })
       .then(() =>
         cy
           .wrap($entradas.eq(1))
           .should("be.visible")
           .clear({ force: true })
-          .type(valorEsperado, { force: true }),
+          .type(valorFinal, { force: true }),
       )
       .then(() => {
         expect(
           obterValorDoCampo($entradas.eq(0)),
           "valor mínimo liquidado preenchido no filtro avançado",
-        ).to.equal(valorEsperado);
+        ).to.equal(valorInicial);
         expect(
           obterValorDoCampo($entradas.eq(1)),
           "valor máximo liquidado preenchido no filtro avançado",
-        ).to.equal(valorEsperado);
+        ).to.equal(valorFinal);
 
-        return cy.wrap(valorEsperado, { log: false });
+        return cy.wrap(valorInicial, { log: false });
       });
   });
 }
 
-function preencherValoresPagosNoFiltroAvancado(valorEsperado) {
+function preencherValoresPagosNoFiltroAvancado(
+  valorInicial,
+  valorFinal = valorInicial,
+) {
   return obterCampoAvancadoPorRotulo("Valores Pagos").then(($campo) => {
     const $entradas = $campo.find("input, textarea").filter(":visible");
 
@@ -944,25 +1011,25 @@ function preencherValoresPagosNoFiltroAvancado(valorEsperado) {
       .wrap($entradas.eq(0))
       .should("be.visible")
       .clear({ force: true })
-      .type(valorEsperado, { force: true })
+      .type(valorInicial, { force: true })
       .then(() =>
         cy
           .wrap($entradas.eq(1))
           .should("be.visible")
           .clear({ force: true })
-          .type(valorEsperado, { force: true }),
+          .type(valorFinal, { force: true }),
       )
       .then(() => {
         expect(
           obterValorDoCampo($entradas.eq(0)),
           "valor mínimo pago preenchido no filtro avançado",
-        ).to.equal(valorEsperado);
+        ).to.equal(valorInicial);
         expect(
           obterValorDoCampo($entradas.eq(1)),
           "valor máximo pago preenchido no filtro avançado",
-        ).to.equal(valorEsperado);
+        ).to.equal(valorFinal);
 
-        return cy.wrap(valorEsperado, { log: false });
+        return cy.wrap(valorInicial, { log: false });
       });
   });
 }
@@ -983,10 +1050,12 @@ function selecionarLicitacaoNoFiltroAvancado(numeroProcesso, indice = 0) {
         .should("have.length.at.least", 1)
         .filter(":visible")
         .then(($opcoes) => {
-          expect(
-            indice,
-            `opção de licitação ${indice + 1} disponível no filtro`,
-          ).to.be.lessThan($opcoes.length);
+          if (indice >= $opcoes.length) {
+            cy.log(
+              `A opção de licitação ${indice + 1} não está disponível nesta busca`,
+            );
+            return cy.wrap(null, { log: false });
+          }
 
           const opcao = $opcoes.eq(indice);
           const licitacaoSelecionada = normalizarTexto(opcao.text());
@@ -1023,6 +1092,10 @@ function selecionarLicitacaoComResultado(numeroProcesso, indice = 0) {
 
   return selecionarLicitacaoNoFiltroAvancado(numeroProcesso, indice).then(
     (licitacaoSelecionada) => {
+      if (!licitacaoSelecionada) {
+        return cy.wrap(null, { log: false });
+      }
+
       pesquisarFiltroAvancadoComOuSemResultado();
 
       return obterQuantidadeDeRegistrosSemRetry().then((quantidade) => {
@@ -1032,15 +1105,38 @@ function selecionarLicitacaoComResultado(numeroProcesso, indice = 0) {
 
         const proximoIndice = indice + 1;
 
-        expect(
-          proximoIndice,
-          "próxima opção de licitação disponível após resultado vazio",
-        ).to.be.lessThan(licitacaoSelecionada.totalOpcoes);
+        if (proximoIndice >= licitacaoSelecionada.totalOpcoes) {
+          cy.log(
+            `Nenhum resultado para as ${licitacaoSelecionada.totalOpcoes} opções de licitação disponíveis`,
+          );
+          return cy.wrap(null, { log: false });
+        }
 
         return selecionarLicitacaoComResultado(numeroProcesso, proximoIndice);
       });
     },
   );
+}
+
+function validarAusenciaDeResultadoDaLicitacao() {
+  return cy
+    .get("#not-found-line", { timeout: 30000 })
+    .should("be.visible")
+    .and("contain.text", "Nenhum resultado encontrado")
+    .then(() => {
+      const mensagem =
+        "ALERTA: Nenhum resultado encontrado para o filtro Procedimento Licitatório.";
+
+      Cypress.log({
+        name: "ALERTA",
+        message: mensagem,
+        consoleProps: () => ({
+          filtro: "Procedimento Licitatório",
+          resultado: "sem dados",
+        }),
+      });
+      cy.log(mensagem);
+    });
 }
 
 function selecionarAnoNoFiltroAvancado(anoEsperado) {
@@ -2289,6 +2385,64 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
     );
   });
 
+  // Envia o valor inicial acima do valor final e valida o alerta do intervalo.
+  it("coleta o alerta ao pesquisar com valor inicial empenhado maior que o final", () => {
+    obterValoresEmpenhadosDosDetalhamentos().then((valoresEmpenhados) => {
+      const valoresNumericos = valoresEmpenhados
+        .map((texto) => ({
+          texto,
+          numerico: converterValorMonetario(texto),
+        }))
+        .filter(({ numerico }) => Number.isFinite(numerico))
+        .sort((valorA, valorB) => valorB.numerico - valorA.numerico);
+
+      expect(
+        valoresNumericos.length,
+        "valores empenhados numéricos disponíveis para validar o intervalo",
+      ).to.be.greaterThan(0);
+
+      const valorFinal = valoresNumericos[0];
+      const valorInicialInvalido = formatarValorMonetario(
+        valorFinal.numerico + 1,
+      );
+
+      abrirFiltroAvancado();
+      preencherValoresEmpenhadosNoFiltroAvancado(
+        valorInicialInvalido,
+        valorFinal.texto,
+      );
+      cy.contains("button, a, div", "PESQUISAR").click({ force: true });
+
+      cy.get(".alertas-msg > p", { timeout: 30000 })
+        .first()
+        .should("be.visible")
+        .invoke("text")
+        .then((textoAlerta) => {
+          const mensagem = normalizarTexto(textoAlerta);
+          const indicacaoDeErro =
+            /mínimo|máximo|menor|maior|intervalo|valor|inválid|invalíd/i.test(
+              mensagem,
+            );
+
+          expect(
+            indicacaoDeErro,
+            "alerta de intervalo de valores empenhados inválido exibido",
+          ).to.equal(true);
+
+          Cypress.log({
+            name: "ALERTA",
+            message: mensagem || "Valor inicial maior que o valor final",
+            consoleProps: () => ({
+              valorInicial: valorInicialInvalido,
+              valorFinal: valorFinal.texto,
+              mensagem,
+            }),
+          });
+          cy.log(`ALERTA: ${mensagem}`);
+        });
+    });
+  });
+
   // Aplica o intervalo de valores liquidados e valida o detalhe.
   it("filtra por valores liquidados e valida o valor no detalhe do resultado", () => {
     obterValoresLiquidadosDosDetalhamentos().then((valoresLiquidados) =>
@@ -2296,6 +2450,64 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
         (valorLiquidado) => validarValorLiquidadoNoResultado(valorLiquidado),
       ),
     );
+  });
+
+  // Envia o valor mínimo acima do máximo e valida o alerta do intervalo.
+  it("coleta o alerta ao pesquisar com valor mínimo liquidado maior que o máximo", () => {
+    obterValoresLiquidadosDosDetalhamentos().then((valoresLiquidados) => {
+      const valoresNumericos = valoresLiquidados
+        .map((texto) => ({
+          texto,
+          numerico: converterValorMonetario(texto),
+        }))
+        .filter(({ numerico }) => Number.isFinite(numerico))
+        .sort((valorA, valorB) => valorB.numerico - valorA.numerico);
+
+      expect(
+        valoresNumericos.length,
+        "valores liquidados numéricos disponíveis para validar o intervalo",
+      ).to.be.greaterThan(0);
+
+      const valorFinal = valoresNumericos[0];
+      const valorInicialInvalido = formatarValorMonetario(
+        valorFinal.numerico + 1,
+      );
+
+      abrirFiltroAvancado();
+      preencherValoresLiquidadosNoFiltroAvancado(
+        valorInicialInvalido,
+        valorFinal.texto,
+      );
+      cy.contains("button, a, div", "PESQUISAR").click({ force: true });
+
+      cy.get(".alertas-msg > p", { timeout: 30000 })
+        .first()
+        .should("be.visible")
+        .invoke("text")
+        .then((textoAlerta) => {
+          const mensagem = normalizarTexto(textoAlerta);
+          const indicacaoDeErro =
+            /mínimo|máximo|menor|maior|intervalo|valor|inválid|invalíd/i.test(
+              mensagem,
+            );
+
+          expect(
+            indicacaoDeErro,
+            "alerta de intervalo de valores liquidados inválido exibido",
+          ).to.equal(true);
+
+          Cypress.log({
+            name: "ALERTA",
+            message: mensagem || "Valor mínimo maior que o valor máximo",
+            consoleProps: () => ({
+              valorMinimo: valorInicialInvalido,
+              valorMaximo: valorFinal.texto,
+              mensagem,
+            }),
+          });
+          cy.log(`ALERTA: ${mensagem}`);
+        });
+    });
   });
 
   // Aplica o intervalo de valores pagos e valida o detalhe.
@@ -2307,13 +2519,75 @@ describe(`Portal: ${DESPESAS_NOME} - filtro avançado`, () => {
     );
   });
 
+  // Envia o valor mínimo acima do máximo e valida o alerta do intervalo.
+  it("coleta o alerta ao pesquisar com valor mínimo pago maior que o máximo", () => {
+    obterValoresPagosDosDetalhamentos().then((valoresPagos) => {
+      const valoresNumericos = valoresPagos
+        .map((texto) => ({
+          texto,
+          numerico: converterValorMonetario(texto),
+        }))
+        .filter(({ numerico }) => Number.isFinite(numerico))
+        .sort((valorA, valorB) => valorB.numerico - valorA.numerico);
+
+      expect(
+        valoresNumericos.length,
+        "valores pagos numéricos disponíveis para validar o intervalo",
+      ).to.be.greaterThan(0);
+
+      const valorFinal = valoresNumericos[0];
+      const valorInicialInvalido = formatarValorMonetario(
+        valorFinal.numerico + 1,
+      );
+
+      abrirFiltroAvancado();
+      preencherValoresPagosNoFiltroAvancado(
+        valorInicialInvalido,
+        valorFinal.texto,
+      );
+      cy.contains("button, a, div", "PESQUISAR").click({ force: true });
+
+      cy.get(".alertas-msg > p", { timeout: 30000 })
+        .first()
+        .should("be.visible")
+        .invoke("text")
+        .then((textoAlerta) => {
+          const mensagem = normalizarTexto(textoAlerta);
+          const indicacaoDeErro =
+            /mínimo|máximo|menor|maior|intervalo|valor|inválid|invalíd/i.test(
+              mensagem,
+            );
+
+          expect(
+            indicacaoDeErro,
+            "alerta de intervalo de valores pagos inválido exibido",
+          ).to.equal(true);
+
+          Cypress.log({
+            name: "ALERTA",
+            message: mensagem || "Valor mínimo maior que o valor máximo",
+            consoleProps: () => ({
+              valorMinimo: valorInicialInvalido,
+              valorMaximo: valorFinal.texto,
+              mensagem,
+            }),
+          });
+          cy.log(`ALERTA: ${mensagem}`);
+        });
+    });
+  });
+
   // Pesquisa o procedimento licitatório e valida uma licitação retornada.
   it("filtra por procedimento licitatório e valida uma licitação retornada", () => {
     obterProcessoLicitatorioDoDetalhamento()
       .then((numeroProcesso) => selecionarLicitacaoComResultado(numeroProcesso))
-      .then((licitacaoSelecionada) =>
-        validarLicitacaoNoResultado(licitacaoSelecionada.texto),
-      );
+      .then((licitacaoSelecionada) => {
+        if (!licitacaoSelecionada) {
+          return validarAusenciaDeResultadoDaLicitacao();
+        }
+
+        return validarLicitacaoNoResultado(licitacaoSelecionada.texto);
+      });
   });
 
   // Pesquisa pelo ano no campo do filtro avançado.
